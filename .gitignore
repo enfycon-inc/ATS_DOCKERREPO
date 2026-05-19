@@ -1,0 +1,10 @@
+# Ignore the code repositories (they are tracked separately)
+/ats_backend/
+/ats_frontend/
+/resume-parser-main/
+
+# Ignore IDE and system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

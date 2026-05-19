@@ -1,0 +1,67 @@
+services:
+  # 1. The Redis Message Broker Queue
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    restart: always
+
+  # 2. The FastAPI Web Server (Python Sourcing Microservice API)
+  api:
+    build: ./resume-parser-main
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./resume-parser-main/.env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./resume-parser-main:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - redis
+    restart: always
+
+  # 3. The Celery Background Worker
+  worker:
+    build: ./resume-parser-main
+    command: celery -A app.celery_app worker --loglevel=info
+    env_file:
+      - ./resume-parser-main/.env
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./resume-parser-main:/app
+    depends_on:
+      - redis
+      - api
+    restart: always
+
+  # 4. The Node.js Backend Server (ATS Core API)
+  backend:
+    build: ./ats_backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./ats_backend/.env
+    volumes:
+      - ./ats_backend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+      - redis
+    restart: always
+
+  # 5. The Next.js Frontend Portal (Recruiter UI)
+  frontend:
+    build: ./ats_frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./ats_frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: always
