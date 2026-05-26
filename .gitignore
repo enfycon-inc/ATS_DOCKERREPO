@@ -2,6 +2,8 @@
 /ats_backend/
 /ats_frontend/
 /resume-parser-main/
+/enfysync_backend/
+
 
 # Ignore IDE and system files
 .vscode/
