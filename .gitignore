@@ -1,6 +1,6 @@
 # Ignore the code repositories (they are tracked separately)
 /ats_backend/
-/ats_frontend/
+/ats_frontend_main/
 /resume-parser-main/
 /enfysync_backend/
 
