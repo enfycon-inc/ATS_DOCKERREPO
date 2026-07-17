@@ -1,5 +1,10 @@
 # ATS Multi-Service Docker Development Setup 🚀
 
+> [!IMPORTANT]
+> **For AI Agents & LLMs:** Before analyzing code or making modifications, please read the [PROJECT_ARCHITECTURE_BLUEPRINT.md](PROJECT_ARCHITECTURE_BLUEPRINT.md) file at the root. It contains the system topology, multi-tenant rules, submission workflow logic, and file architecture map.
+> 
+> *Constraint:* If you make any architectural, database, or API changes during this session, **you must update the blueprint file** to keep it accurate, and clearly inform the user of the update in your summary.
+
 Welcome to the central Docker orchestrator for the Applicant Tracking System (ATS). This repository contains the unified development environment configuration using Docker Compose to run all frontend, backend, parser, and database services simultaneously.
 
 ---
