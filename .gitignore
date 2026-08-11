@@ -4,6 +4,9 @@
 /resume-parser-main/
 /enfysync_backend/
 
+.agents/
+.claude/
+
 
 # Ignore IDE and system files
 .vscode/
