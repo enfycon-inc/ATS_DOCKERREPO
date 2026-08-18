@@ -54,6 +54,26 @@ services:
       - redis
     restart: always
 
+  # 5. Keycloak Identity Provider (Single Realm Auth Engine)
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: keycloak
+    command: start-dev
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_HTTP_ENABLED=true
+      - KC_HOSTNAME_STRICT=false
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres?sslmode=require&prepareThreshold=0&preparedStatementCacheQueries=0
+      - KC_DB_USERNAME=postgres.zqpxnnsbbqdlhememsyj
+      - KC_DB_PASSWORD=EWhbqnM6IWe5IJaV
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak/imports:/opt/keycloak/data/import
+    restart: always
+
   # 5. The Next.js Frontend Portal (Recruiter UI)
   # (Commented out to run frontend locally in terminal for faster performance/development)
   # frontend:
