@@ -37,6 +37,10 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
+      - AUTH_SECRET=1kc7Cf4Z2V2XX0WfGLrET9iZzWyDkar9RlqjIK3Vkxo
+      - NEXTAUTH_SECRET=1kc7Cf4Z2V2XX0WfGLrET9iZzWyDkar9RlqjIK3Vkxo
+      - AUTH_TRUST_HOST=true
+      - NEXTAUTH_URL=https://enfyjobs.com
     depends_on:
       - backend
     logging:
