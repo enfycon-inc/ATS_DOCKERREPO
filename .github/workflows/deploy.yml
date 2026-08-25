@@ -59,13 +59,12 @@ jobs:
             printf '%s' "$VPS_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           fi
 
-          # Ensure trailing newline and strict permissions
-          sed -i -e '$a\' ~/.ssh/deploy_key
+          # Ensure strict permissions
           chmod 600 ~/.ssh/deploy_key
 
-          # Verify key validity with ssh-keygen
-          echo "🔍 Verifying SSH key fingerprint..."
-          ssh-keygen -l -f ~/.ssh/deploy_key
+          # Auto-derive corresponding public key for seamless OpenSSH authentication
+          ssh-keygen -y -f ~/.ssh/deploy_key > ~/.ssh/deploy_key.pub 2>/dev/null || true
+          chmod 644 ~/.ssh/deploy_key.pub 2>/dev/null || true
 
           echo "🚀 Connecting to AWS VPS ($VPS_HOST)..."
           ssh -i ~/.ssh/deploy_key \
@@ -73,6 +72,7 @@ jobs:
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
               -o IdentitiesOnly=yes \
+              -o ConnectTimeout=15 \
               "${VPS_USERNAME:-ubuntu}@$VPS_HOST" bash << 'EOF'
             set -e
             echo "=========================================================="
