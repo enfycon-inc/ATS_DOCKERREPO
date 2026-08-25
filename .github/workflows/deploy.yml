@@ -89,6 +89,7 @@ jobs:
 
             # 5. Build and launch Docker Compose Production stack
             echo "🐳 Building & restarting production Docker containers..."
+            docker container prune -f || true
             dc -f docker-compose.prod.yml up -d --build --remove-orphans
 
             # 6. Clean up dangling builder cache
