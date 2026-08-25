@@ -88,16 +88,19 @@ jobs:
             done
 
             # 5. Build and launch Docker Compose Production stack
-            echo "🐳 Building & restarting production Docker containers with Caddy SSL..."
+            echo "🐳 Building & restarting production Docker containers..."
             dc -f docker-compose.prod.yml up -d --build --remove-orphans
 
             # 6. Clean up dangling builder cache
             docker image prune -f || true
 
-            # 7. Health Check
+            # 7. Health Check and Caddy Logs Inspection
             echo "🩺 Checking container status..."
-            sleep 5
+            sleep 3
             dc -f docker-compose.prod.yml ps
+
+            echo "📋 Recent Caddy SSL Logs:"
+            dc -f docker-compose.prod.yml logs --tail=40 caddy
 
             echo "=========================================================="
             echo "✅ Deployment completed successfully on AWS VPS!"
