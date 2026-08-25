@@ -11,14 +11,14 @@ api.enfyjobs.com {
     reverse_proxy backend:5000
 }
 
-# ─── 2. Root Frontend Domain ─────────────────────────────────────────
-enfyjobs.com {
+# ─── 2. Root & Primary Workspace Frontend Domains ───────────────────
+enfyjobs.com, deb.enfyjobs.com {
     encode gzip zstd
     reverse_proxy frontend:3000
 }
 
-# ─── 3. All Multi-Tenant Subdomains (*.enfyjobs.com) ─────────────────
-*.enfyjobs.com {
+# ─── 3. Dynamic Multi-Tenant Subdomains & Custom Domains ─────────────
+https:// {
     tls {
         on_demand
     }
