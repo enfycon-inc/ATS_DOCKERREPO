@@ -1,6 +1,8 @@
 {
-    # Global Caddy Configuration
     email admin@enfyjobs.com
+    on_demand_tls {
+        ask http://backend:5000/docs
+    }
 }
 
 # ─── API Subdomain ───────────────────────────────────────────────────
@@ -9,11 +11,10 @@ api.enfyjobs.com {
     reverse_proxy backend:5000
 }
 
-# ─── Root and Wildcard Subdomains (*.enfyjobs.com & enfyjobs.com) ─────
-*.enfyjobs.com, enfyjobs.com {
+# ─── Apex / Root Domain ──────────────────────────────────────────────
+enfyjobs.com {
     encode gzip zstd
 
-    # Route backend API and Swagger docs directly to NestJS
     handle /api/* {
         reverse_proxy backend:5000
     }
@@ -22,7 +23,26 @@ api.enfyjobs.com {
         reverse_proxy backend:5000
     }
 
-    # Route all other web traffic to Next.js Frontend
+    handle {
+        reverse_proxy frontend:3000
+    }
+}
+
+# ─── All Subdomains (*.enfyjobs.com) & Tenant Custom Domains ─────────
+:443 {
+    tls {
+        on_demand
+    }
+    encode gzip zstd
+
+    handle /api/* {
+        reverse_proxy backend:5000
+    }
+
+    handle /docs* {
+        reverse_proxy backend:5000
+    }
+
     handle {
         reverse_proxy frontend:3000
     }
