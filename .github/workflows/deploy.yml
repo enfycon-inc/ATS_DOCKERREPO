@@ -7,37 +7,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ─── 1. Build Verification & Typechecks ────────────────────────────
+  # ─── 1. Verify Compose & Config Integrity ─────────────────────────
   verify:
-    name: Verify Builds & Type Checking
+    name: Verify Docker & Config Integrity
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout Orchestrator Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: |
-            ats_backend/package-lock.json
-            ats_frontend_main/package-lock.json
-
-      - name: Verify Backend Build
+      - name: Validate Docker Compose Configuration
         run: |
-          cd ats_backend
-          npm ci --legacy-peer-deps
-          npm run build
+          echo "🔍 Validating docker-compose.prod.yml syntax..."
+          docker compose -f docker-compose.prod.yml config
 
-      - name: Verify Frontend Build
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-          NEXT_PUBLIC_API_URL: https://api.enfyjobs.com
+      - name: Validate Caddyfile Syntax
         run: |
-          cd ats_frontend_main
-          npm ci --legacy-peer-deps
-          npm run build
+          echo "🔍 Validating Caddyfile..."
+          docker run --rm -v ${{ github.workspace }}/Caddyfile:/etc/caddy/Caddyfile caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 
   # ─── 2. Deploy to AWS VPS via SSH ──────────────────────────────────
   deploy:
