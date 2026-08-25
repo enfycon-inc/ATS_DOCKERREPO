@@ -31,7 +31,8 @@ services:
     expose:
       - "3000"
     env_file:
-      - ./ats_frontend_main/.env
+      - path: ./ats_frontend_main/.env
+        required: false
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -54,7 +55,8 @@ services:
     expose:
       - "5000"
     env_file:
-      - ./ats_backend/.env
+      - path: ./ats_backend/.env
+        required: false
     environment:
       - NODE_ENV=production
       - PORT=5000
@@ -80,7 +82,8 @@ services:
     expose:
       - "8000"
     env_file:
-      - ./resume-parser-main/.env
+      - path: ./resume-parser-main/.env
+        required: false
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
@@ -101,7 +104,8 @@ services:
     container_name: ats_parser_worker
     restart: always
     env_file:
-      - ./resume-parser-main/.env
+      - path: ./resume-parser-main/.env
+        required: false
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0

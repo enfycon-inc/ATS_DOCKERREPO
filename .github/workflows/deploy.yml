@@ -17,6 +17,10 @@ jobs:
 
       - name: Validate Docker Compose Configuration
         run: |
+          echo "📁 Creating placeholder directories for build contexts..."
+          mkdir -p ats_frontend_main ats_backend resume-parser-main keycloak/import
+          touch ats_frontend_main/.env ats_backend/.env resume-parser-main/.env
+          
           echo "🔍 Validating docker-compose.prod.yml syntax..."
           docker compose -f docker-compose.prod.yml config
 
