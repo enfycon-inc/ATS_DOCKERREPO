@@ -70,25 +70,24 @@ jobs:
           if "-----BEGIN" in raw_key:
               print("📄 Detected raw OpenSSH / PEM key format.")
               clean = raw_key.replace("\\n", "\n").replace("\r", "").strip() + "\n"
-              with open(key_path, "w", encoding="utf-8", newline="\n") as f:
-                  f.write(clean)
+              content = clean
           else:
               print("🔐 Detected Base64-encoded key format. Decoding...")
               try:
-                  decoded = base64.b64decode(raw_key)
-                  with open(key_path, "wb") as f:
-                      f.write(decoded.strip() + b"\n")
+                  decoded = base64.b64decode(raw_key).decode('utf-8', errors='ignore')
+                  content = decoded.replace("\r", "").strip() + "\n"
               except Exception as err:
                   print(f"❌ Failed to decode base64 key: {err}")
                   sys.exit(1)
 
-          os.chmod(key_path, 0o600)
-          print("✓ SSH private key written successfully.")
-          PY_EOF
+          with open(key_path, "w", encoding="utf-8", newline="\n") as f:
+              f.write(content)
 
-          # Auto-derive corresponding public key
-          ssh-keygen -y -f ~/.ssh/deploy_key > ~/.ssh/deploy_key.pub 2>/dev/null || true
-          chmod 644 ~/.ssh/deploy_key.pub 2>/dev/null || true
+          os.chmod(key_path, 0o600)
+
+          lines = [l.strip() for l in content.splitlines() if l.strip()]
+          print(f"✓ Key written ({len(lines)} lines). First: '{lines[0]}' | Last: '{lines[-1]}'")
+          PY_EOF
 
           echo "🚀 Connecting to AWS VPS ($VPS_HOST)..."
           ssh -i ~/.ssh/deploy_key \
@@ -97,6 +96,7 @@ jobs:
               -o UserKnownHostsFile=/dev/null \
               -o IdentitiesOnly=yes \
               -o ConnectTimeout=15 \
+              -o BatchMode=yes \
               "${VPS_USERNAME:-ubuntu}@$VPS_HOST" bash << 'EOF'
             set -e
             echo "=========================================================="
