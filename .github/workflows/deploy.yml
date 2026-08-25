@@ -29,7 +29,7 @@ jobs:
           echo "🔍 Validating Caddyfile..."
           docker run --rm -v ${{ github.workspace }}/Caddyfile:/etc/caddy/Caddyfile caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 
-  # ─── 2. Deploy to AWS VPS via SSH (Enfysync Proven Pattern) ─────────
+  # ─── 2. Deploy to AWS VPS via SSH ──────────────────────────────────
   deploy:
     name: Deploy to AWS VPS
     needs: verify
@@ -67,8 +67,7 @@ jobs:
 
             # 2. Ensure project directory exists
             APP_DIR="/var/www/ats"
-            sudo mkdir -p $APP_DIR
-            sudo chown -R $USER:$USER $APP_DIR
+            mkdir -p $APP_DIR
             cd $APP_DIR
 
             # 3. Clone or update root orchestrator repository using SSH
@@ -77,6 +76,7 @@ jobs:
               git clone git@github.com:enfycon-inc/ATS_DOCKERREPO.git .
             else
               echo "🔄 Pulling latest ATS_DOCKERREPO changes..."
+              git remote set-url origin git@github.com:enfycon-inc/ATS_DOCKERREPO.git || true
               git fetch origin main
               git reset --hard origin/main
             fi
@@ -90,6 +90,7 @@ jobs:
               else
                 echo "🔄 Updating $local_dir..."
                 cd $local_dir
+                git remote set-url origin git@github.com:enfycon-inc/$remote_repo.git || true
                 git fetch origin main
                 git reset --hard origin/main
                 cd ..
