@@ -46,7 +46,7 @@ jobs:
           script_stop: true
           command_timeout: 30m
           script: |
-            set -e
+            set -ex
 
             # Clean large SSH environment variables to avoid ARG_MAX issues
             unset INPUT_SCRIPT INPUT_KEY INPUT_PROXY_KEY
@@ -65,10 +65,18 @@ jobs:
             mkdir -p ~/.ssh
             ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
 
-            # 2. Ensure project directory exists
-            APP_DIR="/var/www/ats"
-            mkdir -p $APP_DIR
-            cd $APP_DIR
+            # 2. Determine App Directory with proper permissions
+            if [ -d "/var/www/ats" ] && [ -w "/var/www/ats" ]; then
+              APP_DIR="/var/www/ats"
+            elif sudo mkdir -p /var/www/ats 2>/dev/null && sudo chown -R $USER:$USER /var/www/ats 2>/dev/null; then
+              APP_DIR="/var/www/ats"
+            else
+              APP_DIR="$HOME/ats"
+              mkdir -p "$APP_DIR"
+            fi
+
+            echo "📂 Deploying in $APP_DIR..."
+            cd "$APP_DIR"
 
             # 3. Clone or update root orchestrator repository using SSH
             if [ ! -d ".git" ]; then
@@ -86,14 +94,14 @@ jobs:
               IFS=":" read -r local_dir remote_repo <<< "$repo_info"
               if [ ! -d "$local_dir/.git" ]; then
                 echo "📥 Cloning $remote_repo into $local_dir..."
-                git clone git@github.com:enfycon-inc/$remote_repo.git $local_dir
+                git clone git@github.com:enfycon-inc/$remote_repo.git "$local_dir"
               else
                 echo "🔄 Updating $local_dir..."
-                cd $local_dir
+                cd "$local_dir"
                 git remote set-url origin git@github.com:enfycon-inc/$remote_repo.git || true
                 git fetch origin main
                 git reset --hard origin/main
-                cd ..
+                cd "$APP_DIR"
               fi
             done
 
@@ -102,7 +110,7 @@ jobs:
             dc -f docker-compose.prod.yml up -d --build --remove-orphans
 
             # 6. Clean up dangling builder cache
-            docker image prune -f
+            docker image prune -f || true
 
             # 7. Health Check
             echo "🩺 Checking container status..."
