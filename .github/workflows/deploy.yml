@@ -29,76 +29,32 @@ jobs:
           echo "🔍 Validating Caddyfile..."
           docker run --rm -v ${{ github.workspace }}/Caddyfile:/etc/caddy/Caddyfile caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 
-  # ─── 2. Deploy to AWS VPS via Native OpenSSH ───────────────────────
+  # ─── 2. Deploy to AWS VPS via SSH (Enfysync Proven Pattern) ─────────
   deploy:
     name: Deploy to AWS VPS
     needs: verify
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Deploy to VPS with Rollback and Cleanup
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          python-version: '3.x'
-
-      - name: Execute Remote Deployment via SSH
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-        run: |
-          if [ -z "$VPS_HOST" ] || [ -z "$VPS_SSH_KEY" ]; then
-            echo "❌ Error: Missing required GitHub Secrets (VPS_HOST or VPS_SSH_KEY)."
-            echo "👉 Please set VPS_HOST and VPS_SSH_KEY in GitHub Repo Settings > Secrets and variables > Actions"
-            exit 1
-          fi
-
-          echo "🔑 Preparing SSH key with Python decoder..."
-          mkdir -p ~/.ssh
-
-          python3 - << 'PY_EOF'
-          import os, sys, base64
-
-          raw_key = os.environ.get("VPS_SSH_KEY", "").strip()
-          if not raw_key:
-              print("❌ VPS_SSH_KEY is empty!")
-              sys.exit(1)
-
-          key_path = os.path.expanduser("~/.ssh/deploy_key")
-
-          if "-----BEGIN" in raw_key:
-              print("📄 Detected raw OpenSSH / PEM key format.")
-              clean = raw_key.replace("\\n", "\n").replace("\r", "").strip() + "\n"
-              content = clean
-          else:
-              print("🔐 Detected Base64-encoded key format. Decoding...")
-              try:
-                  decoded = base64.b64decode(raw_key).decode('utf-8', errors='ignore')
-                  content = decoded.replace("\r", "").strip() + "\n"
-              except Exception as err:
-                  print(f"❌ Failed to decode base64 key: {err}")
-                  sys.exit(1)
-
-          with open(key_path, "w", encoding="utf-8", newline="\n") as f:
-              f.write(content)
-
-          os.chmod(key_path, 0o600)
-
-          lines = [l.strip() for l in content.splitlines() if l.strip()]
-          print(f"✓ Key written ({len(lines)} lines). First: '{lines[0]}' | Last: '{lines[-1]}'")
-          PY_EOF
-
-          echo "🚀 Connecting to AWS VPS ($VPS_HOST)..."
-          ssh -i ~/.ssh/deploy_key \
-              -p ${VPS_PORT:-22} \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o IdentitiesOnly=yes \
-              -o ConnectTimeout=15 \
-              -o BatchMode=yes \
-              "${VPS_USERNAME:-ubuntu}@$VPS_HOST" bash << 'EOF'
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER || secrets.VPS_USERNAME || 'ubuntu' }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script_stop: true
+          command_timeout: 30m
+          script: |
             set -e
+
+            # Clean large SSH environment variables to avoid ARG_MAX issues
+            unset INPUT_SCRIPT INPUT_KEY INPUT_PROXY_KEY
+
+            dc() {
+              env -i PATH="$PATH" HOME="$HOME" USER="$USER" docker compose "$@"
+            }
+
             echo "=========================================================="
             echo "🚀 Starting ATS Production Deployment on AWS VPS"
             echo "=========================================================="
@@ -142,7 +98,7 @@ jobs:
 
             # 5. Build and launch Docker Compose Production stack
             echo "🐳 Building & restarting production Docker containers..."
-            docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+            dc -f docker-compose.prod.yml up -d --build --remove-orphans
 
             # 6. Clean up dangling builder cache
             docker image prune -f
@@ -150,9 +106,8 @@ jobs:
             # 7. Health Check
             echo "🩺 Checking container status..."
             sleep 5
-            docker compose -f docker-compose.prod.yml ps
+            dc -f docker-compose.prod.yml ps
 
             echo "=========================================================="
             echo "✅ Deployment completed successfully on AWS VPS!"
             echo "=========================================================="
-          EOF
