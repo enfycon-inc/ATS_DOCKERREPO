@@ -36,6 +36,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       - name: Execute Remote Deployment via SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -49,20 +54,39 @@ jobs:
             exit 1
           fi
 
-          echo "🔑 Preparing SSH authentication..."
+          echo "🔑 Preparing SSH key with Python decoder..."
           mkdir -p ~/.ssh
 
-          # Accurately detect whether key is Base64 encoded or raw PEM/OpenSSH
-          if echo "$VPS_SSH_KEY" | grep -q -- '-----BEGIN'; then
-            printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
-          else
-            printf '%s' "$VPS_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
-          fi
+          python3 - << 'PY_EOF'
+          import os, sys, base64
 
-          # Ensure strict permissions
-          chmod 600 ~/.ssh/deploy_key
+          raw_key = os.environ.get("VPS_SSH_KEY", "").strip()
+          if not raw_key:
+              print("❌ VPS_SSH_KEY is empty!")
+              sys.exit(1)
 
-          # Auto-derive corresponding public key for seamless OpenSSH authentication
+          key_path = os.path.expanduser("~/.ssh/deploy_key")
+
+          if "-----BEGIN" in raw_key:
+              print("📄 Detected raw OpenSSH / PEM key format.")
+              clean = raw_key.replace("\\n", "\n").replace("\r", "").strip() + "\n"
+              with open(key_path, "w", encoding="utf-8", newline="\n") as f:
+                  f.write(clean)
+          else:
+              print("🔐 Detected Base64-encoded key format. Decoding...")
+              try:
+                  decoded = base64.b64decode(raw_key)
+                  with open(key_path, "wb") as f:
+                      f.write(decoded.strip() + b"\n")
+              except Exception as err:
+                  print(f"❌ Failed to decode base64 key: {err}")
+                  sys.exit(1)
+
+          os.chmod(key_path, 0o600)
+          print("✓ SSH private key written successfully.")
+          PY_EOF
+
+          # Auto-derive corresponding public key
           ssh-keygen -y -f ~/.ssh/deploy_key > ~/.ssh/deploy_key.pub 2>/dev/null || true
           chmod 644 ~/.ssh/deploy_key.pub 2>/dev/null || true
 
