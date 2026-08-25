@@ -28,8 +28,8 @@ enfyjobs.com {
     }
 }
 
-# ─── All Subdomains (*.enfyjobs.com) & Tenant Custom Domains ─────────
-:443 {
+# ─── Multi-Tenant Subdomains (*.enfyjobs.com) ────────────────────────
+*.enfyjobs.com {
     tls {
         on_demand
     }
