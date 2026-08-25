@@ -1,7 +1,7 @@
 {
     email admin@enfyjobs.com
     on_demand_tls {
-        ask http://backend:5000/
+        ask http://backend:5000/api/auth/check-ssl-domain
     }
 }
 
@@ -11,14 +11,14 @@ api.enfyjobs.com {
     reverse_proxy backend:5000
 }
 
-# ─── 2. Root & Primary Workspace Frontend Domains ───────────────────
-enfyjobs.com, deb.enfyjobs.com {
+# ─── 2. Root Frontend Domain ─────────────────────────────────────────
+enfyjobs.com {
     encode gzip zstd
     reverse_proxy frontend:3000
 }
 
-# ─── 3. Dynamic Multi-Tenant Subdomains & Custom Domains ─────────────
-https:// {
+# ─── 3. Dynamic Multi-Tenant Subdomains & Custom Client Domains ──────
+:443 {
     tls {
         on_demand
     }
