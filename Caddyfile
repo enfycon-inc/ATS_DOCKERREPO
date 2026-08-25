@@ -1,0 +1,81 @@
+{
+    # Global Caddy Configuration
+    email admin@enfyjobs.com
+    
+    # On-Demand TLS for dynamic custom tenant domains (e.g. careers.client.com)
+    on_demand_tls {
+        interval 2m
+        burst 5
+    }
+}
+
+# ─── API Subdomain ───────────────────────────────────────────────────
+api.enfyjobs.com {
+    encode gzip zstd
+    reverse_proxy backend:5000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# ─── Root and Wildcard Subdomains (*.enfyjobs.com & enfyjobs.com) ─────
+*.enfyjobs.com, enfyjobs.com {
+    encode gzip zstd
+
+    # Route backend API and Swagger docs directly to NestJS
+    handle /api/* {
+        reverse_proxy backend:5000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    handle /docs* {
+        reverse_proxy backend:5000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Route all other web traffic to Next.js Frontend
+    handle {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}
+
+# ─── Dynamic Custom Tenant Domains (On-Demand TLS) ───────────────────
+:443 {
+    tls {
+        on_demand
+    }
+    encode gzip zstd
+
+    handle /api/* {
+        reverse_proxy backend:5000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    handle {
+        reverse_proxy frontend:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}
