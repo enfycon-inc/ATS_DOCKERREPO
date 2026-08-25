@@ -29,28 +29,47 @@ jobs:
           echo "🔍 Validating Caddyfile..."
           docker run --rm -v ${{ github.workspace }}/Caddyfile:/etc/caddy/Caddyfile caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 
-  # ─── 2. Deploy to AWS VPS via SSH ──────────────────────────────────
+  # ─── 2. Deploy to AWS VPS via Native OpenSSH ───────────────────────
   deploy:
     name: Deploy to AWS VPS
     needs: verify
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy via SSH to AWS VPS
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          script_stop: true
-          command_timeout: 30m
-          script: |
-            echo "🚀 Starting ATS Deployment on AWS VPS..."
+      - name: Execute Remote Deployment via SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          PROD_ENV_BACKEND: ${{ secrets.PROD_ENV_BACKEND }}
+          PROD_ENV_FRONTEND: ${{ secrets.PROD_ENV_FRONTEND }}
+          PROD_ENV_PARSER: ${{ secrets.PROD_ENV_PARSER }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "❌ Error: Missing required GitHub Secrets (VPS_HOST or VPS_SSH_KEY)."
+            echo "👉 Please set VPS_HOST and VPS_SSH_KEY in GitHub Repo Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+
+          echo "🔑 Preparing SSH authentication..."
+          mkdir -p ~/.ssh
+          echo "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          
+          # Scan VPS host key to prevent MITM prompt
+          ssh-keyscan -p ${VPS_PORT:-22} -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          echo "🚀 Connecting to AWS VPS ($VPS_HOST)..."
+          ssh -i ~/.ssh/deploy_key -p ${VPS_PORT:-22} -o StrictHostKeyChecking=accept-new "${VPS_USERNAME:-ubuntu}@$VPS_HOST" bash << 'EOF'
+            set -e
+            echo "=========================================================="
+            echo "🚀 Starting ATS Production Deployment on AWS VPS"
+            echo "=========================================================="
             export GIT_TERMINAL_PROMPT=0
             export DOCKER_BUILDKIT=1
 
-            # 1. Ensure GitHub is trusted in SSH known_hosts
+            # 1. Ensure GitHub is in known_hosts
             mkdir -p ~/.ssh
             ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
 
@@ -85,27 +104,19 @@ jobs:
               fi
             done
 
-            # 5. Inject Production Secrets if provided
-            if [ -n "${{ secrets.PROD_ENV_BACKEND }}" ]; then
-              echo "${{ secrets.PROD_ENV_BACKEND }}" > ats_backend/.env
-            fi
-            if [ -n "${{ secrets.PROD_ENV_FRONTEND }}" ]; then
-              echo "${{ secrets.PROD_ENV_FRONTEND }}" > ats_frontend_main/.env
-            fi
-            if [ -n "${{ secrets.PROD_ENV_PARSER }}" ]; then
-              echo "${{ secrets.PROD_ENV_PARSER }}" > resume-parser-main/.env
-            fi
-
-            # 6. Build and launch Docker Compose Production stack
+            # 5. Build and launch Docker Compose Production stack
             echo "🐳 Building & restarting production Docker containers..."
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 
-            # 7. Clean up dangling builder cache
+            # 6. Clean up dangling builder cache
             docker image prune -f
 
-            # 8. Health Check
-            echo "🩺 Running container health checks..."
-            sleep 10
+            # 7. Health Check
+            echo "🩺 Checking container status..."
+            sleep 5
             docker compose -f docker-compose.prod.yml ps
 
+            echo "=========================================================="
             echo "✅ Deployment completed successfully on AWS VPS!"
+            echo "=========================================================="
+          EOF
