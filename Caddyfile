@@ -1,49 +1,27 @@
 {
     email admin@enfyjobs.com
     on_demand_tls {
-        ask http://backend:5000/docs
+        ask http://backend:5000/
     }
 }
 
-# ─── API Subdomain ───────────────────────────────────────────────────
+# ─── 1. Single Central Backend API ──────────────────────────────────
 api.enfyjobs.com {
     encode gzip zstd
     reverse_proxy backend:5000
 }
 
-# ─── Apex / Root Domain ──────────────────────────────────────────────
+# ─── 2. Root Frontend Domain ─────────────────────────────────────────
 enfyjobs.com {
     encode gzip zstd
-
-    handle /api/* {
-        reverse_proxy backend:5000
-    }
-
-    handle /docs* {
-        reverse_proxy backend:5000
-    }
-
-    handle {
-        reverse_proxy frontend:3000
-    }
+    reverse_proxy frontend:3000
 }
 
-# ─── Multi-Tenant Subdomains (*.enfyjobs.com) ────────────────────────
+# ─── 3. All Multi-Tenant Subdomains (*.enfyjobs.com) ─────────────────
 *.enfyjobs.com {
     tls {
         on_demand
     }
     encode gzip zstd
-
-    handle /api/* {
-        reverse_proxy backend:5000
-    }
-
-    handle /docs* {
-        reverse_proxy backend:5000
-    }
-
-    handle {
-        reverse_proxy frontend:3000
-    }
+    reverse_proxy frontend:3000
 }
