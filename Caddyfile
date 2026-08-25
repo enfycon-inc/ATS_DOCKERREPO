@@ -1,5 +1,12 @@
 {
     email admin@enfyjobs.com
+
+    # ── ACME CA: Buypass Go (bypasses Let's Encrypt rate-limit history) ──
+    # Buypass is browser-trusted, free, uses same HTTP-01 challenge as LE.
+    # Switch back to default (Let's Encrypt) by removing the acme_ca line
+    # after all certs are successfully issued.
+    acme_ca https://api.buypass.com/acme/directory
+
     on_demand_tls {
         ask http://backend:5000/api/auth/check-ssl-domain
     }

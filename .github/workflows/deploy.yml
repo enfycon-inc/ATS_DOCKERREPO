@@ -96,11 +96,22 @@ jobs:
 
             # 7. Health Check and Caddy Logs Inspection
             echo "🩺 Checking container status..."
-            sleep 3
+            sleep 8
             dc -f docker-compose.prod.yml ps
 
-            echo "📋 Recent Caddy SSL Logs:"
-            dc -f docker-compose.prod.yml logs --tail=40 caddy
+            echo "📋 Recent Caddy Logs (full - including TLS/ACME errors):"
+            dc -f docker-compose.prod.yml logs --tail=80 caddy
+
+            echo "🔐 Caddy cert store contents:"
+            docker exec ats_caddy find /data/caddy/certificates -type f -name '*.crt' 2>/dev/null | sort || echo "No certs yet"
+
+            echo "🔍 Testing ACME challenge path accessibility:"
+            curl -sI http://api.enfyjobs.com/.well-known/acme-challenge/test --max-time 5 | grep -E 'HTTP|Location' || echo "Port 80 check failed"
+            curl -sI http://enfyjobs.com/.well-known/acme-challenge/test --max-time 5 | grep -E 'HTTP|Location' || echo "Port 80 check failed"
+
+            echo "🌐 Testing HTTPS connectivity (should show cert info after ACME completes):"
+            curl -sk -I https://enfyjobs.com/ --max-time 8 | grep -E 'HTTP|Server' || echo "enfyjobs.com HTTPS check"
+            curl -sk -I https://api.enfyjobs.com/ --max-time 8 | grep -E 'HTTP|Server' || echo "api.enfyjobs.com HTTPS check"
 
             echo "=========================================================="
             echo "✅ Deployment completed successfully on AWS VPS!"
