@@ -42,9 +42,6 @@ jobs:
           VPS_USERNAME: ${{ secrets.VPS_USERNAME }}
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-          PROD_ENV_BACKEND: ${{ secrets.PROD_ENV_BACKEND }}
-          PROD_ENV_FRONTEND: ${{ secrets.PROD_ENV_FRONTEND }}
-          PROD_ENV_PARSER: ${{ secrets.PROD_ENV_PARSER }}
         run: |
           if [ -z "$VPS_HOST" ] || [ -z "$VPS_SSH_KEY" ]; then
             echo "❌ Error: Missing required GitHub Secrets (VPS_HOST or VPS_SSH_KEY)."
@@ -54,14 +51,17 @@ jobs:
 
           echo "🔑 Preparing SSH authentication..."
           mkdir -p ~/.ssh
-          echo "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          # Ensure proper newline and strip Windows CR characters
+          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          
-          # Scan VPS host key to prevent MITM prompt
-          ssh-keyscan -p ${VPS_PORT:-22} -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
           echo "🚀 Connecting to AWS VPS ($VPS_HOST)..."
-          ssh -i ~/.ssh/deploy_key -p ${VPS_PORT:-22} -o StrictHostKeyChecking=accept-new "${VPS_USERNAME:-ubuntu}@$VPS_HOST" bash << 'EOF'
+          ssh -i ~/.ssh/deploy_key \
+              -p ${VPS_PORT:-22} \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o IdentitiesOnly=yes \
+              "${VPS_USERNAME:-ubuntu}@$VPS_HOST" bash << 'EOF'
             set -e
             echo "=========================================================="
             echo "🚀 Starting ATS Production Deployment on AWS VPS"
