@@ -47,39 +47,45 @@ jobs:
           command_timeout: 30m
           script: |
             echo "🚀 Starting ATS Deployment on AWS VPS..."
+            export GIT_TERMINAL_PROMPT=0
+            export DOCKER_BUILDKIT=1
 
-            # 1. Ensure project directory exists
+            # 1. Ensure GitHub is trusted in SSH known_hosts
+            mkdir -p ~/.ssh
+            ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+
+            # 2. Ensure project directory exists
             APP_DIR="/var/www/ats"
             sudo mkdir -p $APP_DIR
             sudo chown -R $USER:$USER $APP_DIR
             cd $APP_DIR
 
-            # 2. Clone or update root orchestrator repository
+            # 3. Clone or update root orchestrator repository using SSH
             if [ ! -d ".git" ]; then
               echo "📥 Cloning ATS_DOCKERREPO..."
-              git clone https://github.com/enfycon-inc/ATS_DOCKERREPO.git .
+              git clone git@github.com:enfycon-inc/ATS_DOCKERREPO.git .
             else
               echo "🔄 Pulling latest ATS_DOCKERREPO changes..."
               git fetch origin main
               git reset --hard origin/main
             fi
 
-            # 3. Pull / clone microservices
-            for repo in ats_frontend_main ats_backend resume-parser-main; do
-              if [ ! -d "$repo/.git" ]; then
-                echo "📥 Cloning $repo..."
-                git clone https://github.com/enfycon-inc/$repo.git $repo 2>/dev/null || \
-                git clone https://github.com/enfycon-inc/resume-parser.git $repo
+            # 4. Pull / clone microservices via SSH
+            for repo_info in "ats_frontend_main:ats_frontend_main" "ats_backend:ats_backend" "resume-parser-main:resume-parser"; do
+              IFS=":" read -r local_dir remote_repo <<< "$repo_info"
+              if [ ! -d "$local_dir/.git" ]; then
+                echo "📥 Cloning $remote_repo into $local_dir..."
+                git clone git@github.com:enfycon-inc/$remote_repo.git $local_dir
               else
-                echo "🔄 Updating $repo..."
-                cd $repo
+                echo "🔄 Updating $local_dir..."
+                cd $local_dir
                 git fetch origin main
                 git reset --hard origin/main
                 cd ..
               fi
             done
 
-            # 4. Inject Production Secrets if provided
+            # 5. Inject Production Secrets if provided
             if [ -n "${{ secrets.PROD_ENV_BACKEND }}" ]; then
               echo "${{ secrets.PROD_ENV_BACKEND }}" > ats_backend/.env
             fi
@@ -90,14 +96,14 @@ jobs:
               echo "${{ secrets.PROD_ENV_PARSER }}" > resume-parser-main/.env
             fi
 
-            # 5. Build and launch Docker Compose Production stack
+            # 6. Build and launch Docker Compose Production stack
             echo "🐳 Building & restarting production Docker containers..."
             docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 
-            # 6. Clean up dangling builder cache
+            # 7. Clean up dangling builder cache
             docker image prune -f
 
-            # 7. Health Check
+            # 8. Health Check
             echo "🩺 Running container health checks..."
             sleep 10
             docker compose -f docker-compose.prod.yml ps
