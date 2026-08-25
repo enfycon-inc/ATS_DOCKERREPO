@@ -51,9 +51,25 @@ jobs:
 
           echo "🔑 Preparing SSH authentication..."
           mkdir -p ~/.ssh
-          # Ensure proper newline and strip Windows CR characters
-          printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+
+          # Auto-detect whether key is Base64 encoded or raw PEM/OpenSSH
+          if echo "$VPS_SSH_KEY" | grep -q "BEGIN"; then
+            printf '%s\n' "$VPS_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          else
+            echo "$VPS_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+          fi
+
+          # Ensure trailing newline
+          sed -i -e '$a\' ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+
+          # Verify key validity with ssh-keygen
+          echo "🔍 Verifying SSH key fingerprint..."
+          if ! ssh-keygen -l -f ~/.ssh/deploy_key; then
+            echo "❌ Invalid SSH private key format in VPS_SSH_KEY secret."
+            echo "💡 Tip: You can run 'cat ~/.ssh/id_ed25519 | base64 -w 0' on your VPS and paste that single line into VPS_SSH_KEY secret."
+            exit 1
+          fi
 
           echo "🚀 Connecting to AWS VPS ($VPS_HOST)..."
           ssh -i ~/.ssh/deploy_key \
