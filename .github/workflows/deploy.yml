@@ -79,20 +79,26 @@ jobs:
             git reset --hard origin/main
 
             # 4. Pull / Sync Microservices
-            for repo_info in "ats_frontend_main:ats_frontend_main" "ats_backend:ats_backend" "resume-parser-main:resume-parser"; do
-              local_dir="${repo_info%%:*}"
-              remote_repo="${repo_info##*:}"
-              echo "📦 Syncing $remote_repo into $local_dir..."
-              if [ ! -d "$local_dir/.git" ]; then
-                git clone "git@github.com:enfycon-inc/$remote_repo.git" "$local_dir"
-              else
-                cd "$local_dir"
-                git remote set-url origin "git@github.com:enfycon-inc/$remote_repo.git" || true
-                git fetch origin main || true
-                git reset --hard origin/main
-                cd "$APP_DIR"
-              fi
-            done
+            echo "📦 Syncing ats_frontend_main..."
+            if [ -d "ats_frontend_main/.git" ]; then
+              ( cd ats_frontend_main && git remote set-url origin git@github.com:enfycon-inc/ats_frontend_main.git && git fetch origin main && git reset --hard origin/main )
+            else
+              git clone git@github.com:enfycon-inc/ats_frontend_main.git ats_frontend_main
+            fi
+
+            echo "📦 Syncing ats_backend..."
+            if [ -d "ats_backend/.git" ]; then
+              ( cd ats_backend && git remote set-url origin git@github.com:enfycon-inc/ats_backend.git && git fetch origin main && git reset --hard origin/main )
+            else
+              git clone git@github.com:enfycon-inc/ats_backend.git ats_backend
+            fi
+
+            echo "📦 Syncing resume-parser..."
+            if [ -d "resume-parser-main/.git" ]; then
+              ( cd resume-parser-main && git remote set-url origin git@github.com:enfycon-inc/resume-parser.git && git fetch origin main && git reset --hard origin/main )
+            else
+              git clone git@github.com:enfycon-inc/resume-parser.git resume-parser-main
+            fi
 
             # 5. Build and launch Docker Compose Production Stack
             echo "🐳 Building & updating production Docker containers..."
