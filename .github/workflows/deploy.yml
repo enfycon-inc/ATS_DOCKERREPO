@@ -111,6 +111,7 @@ jobs:
             dc -f docker-compose.prod.yml build --parallel
 
             echo "⚡ Launching updated containers with zero downtime..."
+            docker container prune -f || true
             dc -f docker-compose.prod.yml up -d --remove-orphans
 
             # 6. Clean up dangling build cache
