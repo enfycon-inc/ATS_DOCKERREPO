@@ -6,8 +6,12 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
 jobs:
-  # ─── 1. Verify Compose & Config Integrity ─────────────────────────
+  # ─── 1. Verify Configuration & Compose Integrity ────────────────────
   verify:
     name: Verify Docker & Config Integrity
     runs-on: ubuntu-latest
@@ -29,18 +33,18 @@ jobs:
           echo "🔍 Validating Caddyfile..."
           docker run --rm -v ${{ github.workspace }}/Caddyfile:/etc/caddy/Caddyfile caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 
-  # ─── 2. Deploy to AWS VPS via SSH ──────────────────────────────────
+  # ─── 2. Deploy to Production VPS via SSH ────────────────────────────
   deploy:
-    name: Deploy to AWS VPS
+    name: Deploy to Production AWS VPS
     needs: verify
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy to VPS with Rollback and Cleanup
+      - name: Deploy to VPS with Safe Reload & Health Check
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER || secrets.VPS_USERNAME || 'ubuntu' }}
+          username: ${{ secrets.VPS_USER || 'ubuntu' }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           script_stop: true
@@ -62,7 +66,7 @@ jobs:
             mkdir -p ~/.ssh
             ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
 
-            # 2. Navigate to project directory
+            # 2. Navigate to project root directory
             APP_DIR="/var/www/ats"
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
@@ -74,45 +78,40 @@ jobs:
             git fetch origin main || true
             git reset --hard origin/main
 
-            # 4. Pull / Clone Microservices
+            # 4. Pull / Sync Microservices
             for repo_info in "ats_frontend_main:ats_frontend_main" "ats_backend:ats_backend" "resume-parser-main:resume-parser"; do
               local_dir="${repo_info%%:*}"
               remote_repo="${repo_info##*:}"
               echo "📦 Syncing $remote_repo into $local_dir..."
-              test -d "$local_dir/.git" || git clone "git@github.com:enfycon-inc/$remote_repo.git" "$local_dir"
-              cd "$local_dir"
-              git remote set-url origin "git@github.com:enfycon-inc/$remote_repo.git" || true
-              git fetch origin main || true
-              git reset --hard origin/main
-              cd "$APP_DIR"
+              if [ ! -d "$local_dir/.git" ]; then
+                git clone "git@github.com:enfycon-inc/$remote_repo.git" "$local_dir"
+              else
+                cd "$local_dir"
+                git remote set-url origin "git@github.com:enfycon-inc/$remote_repo.git" || true
+                git fetch origin main || true
+                git reset --hard origin/main
+                cd "$APP_DIR"
+              fi
             done
 
-            # 5. Build and launch Docker Compose Production stack
-            echo "🐳 Building & restarting production Docker containers..."
-            docker container prune -f || true
+            # 5. Build and launch Docker Compose Production Stack
+            echo "🐳 Building & updating production Docker containers..."
             dc -f docker-compose.prod.yml up -d --build --remove-orphans
 
-            # 6. Clean up dangling builder cache
+            # 6. Clean up dangling build cache
+            echo "🧹 Cleaning up dangling build images..."
             docker image prune -f || true
 
-            # 7. Health Check and Caddy Logs Inspection
-            echo "🩺 Checking container status..."
-            sleep 8
+            # 7. Automated Health Checks & Status Verification
+            echo "🩺 Running live health checks..."
+            sleep 10
             dc -f docker-compose.prod.yml ps
 
-            echo "📋 Recent Caddy Logs (full - including TLS/ACME errors):"
-            dc -f docker-compose.prod.yml logs --tail=80 caddy
+            echo "🌐 Checking Frontend availability:"
+            curl -sk -I https://enfyjobs.com/ --max-time 8 | grep -E 'HTTP|Server|Location' || echo "Frontend check warning"
 
-            echo "🔐 Caddy cert store contents:"
-            docker exec ats_caddy find /data/caddy/certificates -type f -name '*.crt' 2>/dev/null | sort || echo "No certs yet"
-
-            echo "🔍 Testing ACME challenge path accessibility:"
-            curl -sI http://api.enfyjobs.com/.well-known/acme-challenge/test --max-time 5 | grep -E 'HTTP|Location' || echo "Port 80 check failed"
-            curl -sI http://enfyjobs.com/.well-known/acme-challenge/test --max-time 5 | grep -E 'HTTP|Location' || echo "Port 80 check failed"
-
-            echo "🌐 Testing HTTPS connectivity (should show cert info after ACME completes):"
-            curl -sk -I https://enfyjobs.com/ --max-time 8 | grep -E 'HTTP|Server' || echo "enfyjobs.com HTTPS check"
-            curl -sk -I https://api.enfyjobs.com/ --max-time 8 | grep -E 'HTTP|Server' || echo "api.enfyjobs.com HTTPS check"
+            echo "🌐 Checking Backend API availability:"
+            curl -sk -I https://api.enfyjobs.com/ --max-time 8 | grep -E 'HTTP|Server|Location' || echo "Backend check warning"
 
             echo "=========================================================="
             echo "✅ Deployment completed successfully on AWS VPS!"
