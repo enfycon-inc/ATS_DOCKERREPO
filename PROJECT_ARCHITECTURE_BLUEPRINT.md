@@ -74,3 +74,22 @@ graph TD
   - `shiftTiming` is prepended to the top of the job description as a stylized HTML block (`<p><strong>Shift Timing:</strong> ...</p>`) on form submit, and parsed back out on edit loading.
   - The permanent placement commission is stored directly in the `clientBillRate` string column (e.g. `8.33% Placement Commission` or `11.5% Placement Commission`), and is parsed back into commissionType/customCommission form states when loading the edit view.
 
+---
+
+## 4. Multi-Tenant Email & Custom Domain Architecture
+
+### Strategy Options
+1. **Model 1 (BYOE - Direct Mail Account)**:
+   - Tenants connect their corporate **Microsoft 365** (Graph API), **Google Workspace** (OAuth2), or **Custom SMTP** in Workspace Settings.
+   - All invitations, notifications, and candidate emails dispatch directly via the tenant's own mailbox (`hr@enfycon.com`, `careers@acme.com`).
+   - Zero cost for the platform; 100% deliverability; no DNS editing required by the client.
+2. **Model 2 (White-Label Custom Domain Delegation)**:
+   - Tenants verify their root domain (`acme.com`) via DKIM/SPF CNAME records.
+   - Platform transactional relay (AWS SES / Resend) cryptographically signs and dispatches emails as `no-reply@acme.com`.
+3. **Model 3 (Default Subdomain - Zero Configuration)**:
+   - Out-of-the-box fallback sending from `"${tenant.name}" <no-reply@${tenant.subdomain}.enfyjobs.com>`.
+
+### Centralized Dispatch Engine (`TenantMailerService`)
+- All transactional triggers (User Credentials, Password Setup, Interview Invites) route through a single service that resolves the tenant's active strategy and dispatches accordingly.
+
+

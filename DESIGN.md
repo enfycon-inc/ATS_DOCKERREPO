@@ -67,3 +67,50 @@ Enfycon ATS is an AI-powered Enterprise Recruitment & Staffing Platform designed
 - Focus Ring: `ring-2 ring-indigo-500/20 border-indigo-500` with `transition-all duration-200`.
 - Interactive Password Toggle: Smooth icon toggle with clear aria label.
 - CTA Button: Gradient background with subtle hover lift (`translate-y-[-1px]`), scale feedback, and spinner loading state.
+
+---
+
+## 4. Multi-Tenant Email & Custom Domain Architecture
+
+### Overview
+EnfySync ATS provides a flexible 3-tier email delivery and custom domain architecture allowing tenant administrators to customize how transactional (welcome emails, password resets) and outbound communications (candidate offers, interview invites) are dispatched:
+
+### Delivery Models
+
+#### Model 1: Direct Mail Connection (BYOE - "Bring Your Own Email")
+- **Target**: Staffing agencies & corporate recruiting teams with existing mail infrastructure.
+- **Providers**: Microsoft 365 (Graph API), Google Workspace (OAuth2), or Custom SMTP (Host/Port/TLS).
+- **Execution Flow**:
+  - Tenant Admin connects their mail account in **Settings $\rightarrow$ Email & Domains**.
+  - ATS stores encrypted OAuth tokens/credentials in `mass_mail.email_accounts` flagged as `is_default = true`.
+  - All transactional and candidate emails dispatch directly via the tenant's mailbox (`hr@enfycon.com`, `careers@client.com`).
+- **Benefits**: Zero platform email costs, 100% inbox deliverability, zero DNS setup required.
+
+#### Model 2: White-Label Custom Domain Delegation (Enterprise Tier)
+- **Target**: Enterprise clients desiring automated sending from `no-reply@<their-domain>.com`.
+- **Execution Flow**:
+  - Tenant enters their custom root domain (e.g. `acme.com`).
+  - Backend generates 3 DKIM CNAME records + SPF TXT validation strings from the platform relay (AWS SES / Resend).
+  - Tenant copies DNS records into their DNS registrar (Cloudflare, GoDaddy, Route53).
+  - Once verified, the platform relay cryptographically signs and dispatches emails as `no-reply@acme.com`.
+
+#### Model 3: Default Platform Subdomain (Zero-Config Default)
+- **Target**: New tenants, trial users, or standard platform accounts.
+- **Execution Flow**:
+  - Automatically enabled out-of-the-box.
+  - Sends via the platform relay with dynamic `From` header: `"${tenant.name}" <no-reply@${tenant.subdomain}.enfyjobs.com>`.
+
+### Centralized Dispatch Hierarchy
+All system email triggers (New User Credentials, Password Setup, Interview Invites) route through `TenantMailerService`:
+```
+Tenant Email Request
+   │
+   ├─► Check Model 1: Is a default tenant email account (Microsoft/Google/SMTP) connected?
+   │     └─► YES: Dispatch via Microsoft Graph / Google API / Tenant SMTP
+   │
+   ├─► Check Model 2: Is a verified custom domain configured?
+   │     └─► YES: Dispatch via Platform Relay with `From: no-reply@<custom_domain>`
+   │
+   └─► FALLBACK (Model 3): Dispatch via Platform Relay with `From: no-reply@<subdomain>.enfyjobs.com`
+```
+
