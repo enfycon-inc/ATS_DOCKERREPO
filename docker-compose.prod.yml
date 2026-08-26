@@ -67,6 +67,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - PYTHON_PARSER_URL=http://api:8000
+      - BASE_DOMAIN=enfyjobs.com
+      - FRONTEND_URL=https://enfyjobs.com
     depends_on:
       - redis
       - api
