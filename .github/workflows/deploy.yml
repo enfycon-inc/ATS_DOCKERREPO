@@ -60,9 +60,13 @@ jobs:
 
             echo "=========================================================="
             echo "🚀 Starting ATS Production Deployment on AWS VPS"
+            echo "📌 Trigger Source: ${{ github.event.client_payload.repo || github.repository }}"
+            echo "📝 Commit Message: ${{ github.event.client_payload.commit || github.event.head_commit.message || 'Automated Sync' }}"
+            echo "👤 Triggered By: ${{ github.event.client_payload.author || github.actor }}"
             echo "=========================================================="
             export GIT_TERMINAL_PROMPT=0
             export DOCKER_BUILDKIT=1
+            export COMPOSE_PARALLEL_LIMIT=4
 
             # 1. Trust GitHub host
             mkdir -p ~/.ssh
@@ -102,9 +106,12 @@ jobs:
               git clone git@github.com:enfycon-inc/resume-parser.git resume-parser-main
             fi
 
-            # 5. Build and launch Docker Compose Production Stack
-            echo "🐳 Building & updating production Docker containers..."
-            dc -f docker-compose.prod.yml up -d --build --remove-orphans
+            # 5. Build and launch Docker Compose Production Stack in Parallel
+            echo "🐳 Building production Docker containers in parallel..."
+            dc -f docker-compose.prod.yml build --parallel
+
+            echo "⚡ Launching updated containers with zero downtime..."
+            dc -f docker-compose.prod.yml up -d --remove-orphans
 
             # 6. Clean up dangling build cache
             echo "🧹 Cleaning up dangling build images..."
