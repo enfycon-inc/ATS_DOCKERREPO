@@ -25,7 +25,7 @@ jobs:
       - name: Validate Docker Compose Configuration
         run: |
           echo "📁 Creating placeholder directories for build contexts..."
-          mkdir -p ats_frontend_main ats_backend resume-parser-main keycloak/import
+          mkdir -p ats_frontend_main ats_backend resume-parser-main keycloak/import caddy_upstreams
           touch ats_frontend_main/.env ats_backend/.env resume-parser-main/.env
           
           echo "🔍 Validating docker-compose.prod.yml syntax..."
@@ -34,7 +34,10 @@ jobs:
       - name: Validate Caddyfile Syntax
         run: |
           echo "🔍 Validating Caddyfile..."
-          docker run --rm -v ${{ github.workspace }}/Caddyfile:/etc/caddy/Caddyfile caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm \
+            -v ${{ github.workspace }}/Caddyfile:/etc/caddy/Caddyfile \
+            -v ${{ github.workspace }}/caddy_upstreams:/etc/caddy/upstreams \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 
   # ─── 2. Deploy to Production VPS via SSH ────────────────────────────
   deploy:
@@ -43,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy to VPS with Safe Reload & Health Check
+      - name: Deploy to VPS with Zero-Downtime Blue/Green Switch
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -55,81 +58,28 @@ jobs:
           script: |
             unset INPUT_SCRIPT INPUT_KEY INPUT_PROXY_KEY
 
-            dc() {
-              env -i PATH="$PATH" HOME="$HOME" USER="$USER" docker compose "$@"
-            }
-
             echo "=========================================================="
-            echo "🚀 Starting ATS Production Deployment on AWS VPS"
+            echo "🚀 Starting ATS Zero-Downtime Deployment on AWS VPS"
             echo "📌 Trigger Source: ${{ github.event.client_payload.repo || github.repository }}"
             echo "📝 Commit Message: ${{ github.event.client_payload.commit || github.event.head_commit.message || 'Automated Sync' }}"
             echo "👤 Triggered By: ${{ github.event.client_payload.author || github.actor }}"
             echo "=========================================================="
-            export GIT_TERMINAL_PROMPT=0
-            export DOCKER_BUILDKIT=1
-            export COMPOSE_PARALLEL_LIMIT=4
+
+            APP_DIR="/var/www/ats"
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
 
             # 1. Trust GitHub host
             mkdir -p ~/.ssh
             ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
 
-            # 2. Navigate to project root directory
-            APP_DIR="/var/www/ats"
-            mkdir -p "$APP_DIR"
-            cd "$APP_DIR"
-
-            # 3. Pull / Clone Root Orchestrator Repository
+            # 2. Sync Orchestrator Repository
             echo "📦 Syncing ATS_DOCKERREPO..."
             test -d .git || git clone git@github.com:enfycon-inc/ATS_DOCKERREPO.git .
             git remote set-url origin git@github.com:enfycon-inc/ATS_DOCKERREPO.git || true
             git fetch origin main || true
             git reset --hard origin/main
 
-            # 4. Pull / Sync Microservices
-            echo "📦 Syncing ats_frontend_main..."
-            if [ -d "ats_frontend_main/.git" ]; then
-              ( cd ats_frontend_main && git remote set-url origin git@github.com:enfycon-inc/ats_frontend_main.git && git fetch origin main && git reset --hard origin/main )
-            else
-              git clone git@github.com:enfycon-inc/ats_frontend_main.git ats_frontend_main
-            fi
-
-            echo "📦 Syncing ats_backend..."
-            if [ -d "ats_backend/.git" ]; then
-              ( cd ats_backend && git remote set-url origin git@github.com:enfycon-inc/ats_backend.git && git fetch origin main && git reset --hard origin/main )
-            else
-              git clone git@github.com:enfycon-inc/ats_backend.git ats_backend
-            fi
-
-            echo "📦 Syncing resume-parser..."
-            if [ -d "resume-parser-main/.git" ]; then
-              ( cd resume-parser-main && git remote set-url origin git@github.com:enfycon-inc/resume-parser.git && git fetch origin main && git reset --hard origin/main )
-            else
-              git clone git@github.com:enfycon-inc/resume-parser.git resume-parser-main
-            fi
-
-            # 5. Build and launch Docker Compose Production Stack in Parallel
-            echo "🐳 Building production Docker containers in parallel..."
-            dc -f docker-compose.prod.yml build --parallel
-
-            echo "⚡ Launching updated containers with zero downtime..."
-            docker container prune -f || true
-            dc -f docker-compose.prod.yml up -d --remove-orphans
-
-            # 6. Clean up dangling build cache
-            echo "🧹 Cleaning up dangling build images..."
-            docker image prune -f || true
-
-            # 7. Automated Health Checks & Status Verification
-            echo "🩺 Running live health checks..."
-            sleep 10
-            dc -f docker-compose.prod.yml ps
-
-            echo "🌐 Checking Frontend availability:"
-            curl -sk -I https://enfyjobs.com/ --max-time 8 | grep -E 'HTTP|Server|Location' || echo "Frontend check warning"
-
-            echo "🌐 Checking Backend API availability:"
-            curl -sk -I https://api.enfyjobs.com/ --max-time 8 | grep -E 'HTTP|Server|Location' || echo "Backend check warning"
-
-            echo "=========================================================="
-            echo "✅ Deployment completed successfully on AWS VPS!"
-            echo "=========================================================="
+            # 3. Ensure deployment script has execution permissions and run it
+            chmod +x scripts/zero_downtime_deploy.sh
+            bash scripts/zero_downtime_deploy.sh

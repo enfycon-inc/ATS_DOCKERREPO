@@ -1,0 +1,4 @@
+reverse_proxy backend_blue:5000 {
+    lb_try_duration 3s
+    lb_try_interval 250ms
+}

@@ -1,0 +1,1 @@
+ask http://backend_blue:5000/api/auth/check-ssl-domain

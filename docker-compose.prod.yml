@@ -10,23 +10,21 @@ services:
       - "443:443/udp" # HTTP/3 Support
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy_upstreams:/etc/caddy/upstreams:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on:
-      - frontend
-      - backend
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
 
-  # ─── 2. Next.js Frontend Application ──────────────────────────────
-  frontend:
+  # ─── 2. Blue Stack: Next.js Frontend Application ──────────────────
+  frontend_blue:
     build:
       context: ./ats_frontend_main
       dockerfile: Dockerfile.prod
-    container_name: ats_frontend
+    container_name: ats_frontend_blue
     restart: always
     expose:
       - "3000"
@@ -37,20 +35,24 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
-    depends_on:
-      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
 
-  # ─── 3. NestJS Core API Backend Server ────────────────────────────
-  backend:
+  # ─── 3. Blue Stack: NestJS Core API Backend Server ────────────────
+  backend_blue:
     build:
       context: ./ats_backend
       dockerfile: Dockerfile.prod
-    container_name: ats_backend
+    container_name: ats_backend_blue
     restart: always
     expose:
       - "5000"
@@ -68,13 +70,82 @@ services:
     depends_on:
       - redis
       - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     logging:
       driver: "json-file"
       options:
         max-size: "20m"
         max-file: "5"
 
-  # ─── 4. FastAPI Resume Parser Microservice ────────────────────────
+  # ─── 4. Green Stack: Next.js Frontend Application ─────────────────
+  frontend_green:
+    build:
+      context: ./ats_frontend_main
+      dockerfile: Dockerfile.prod
+    container_name: ats_frontend_green
+    restart: always
+    expose:
+      - "3000"
+    env_file:
+      - path: ./ats_frontend_main/.env
+        required: false
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - AUTH_TRUST_HOST=true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ─── 5. Green Stack: NestJS Core API Backend Server ───────────────
+  backend_green:
+    build:
+      context: ./ats_backend
+      dockerfile: Dockerfile.prod
+    container_name: ats_backend_green
+    restart: always
+    expose:
+      - "5000"
+    env_file:
+      - path: ./ats_backend/.env
+        required: false
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHON_PARSER_URL=http://api:8000
+      - BASE_DOMAIN=enfyjobs.com
+      - FRONTEND_URL=https://enfyjobs.com
+    depends_on:
+      - redis
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ─── 6. FastAPI Resume Parser Microservice (Shared) ───────────────
   api:
     build:
       context: ./resume-parser-main
@@ -98,7 +169,7 @@ services:
         max-size: "20m"
         max-file: "5"
 
-  # ─── 5. Celery Background Worker ──────────────────────────────────
+  # ─── 7. Celery Background Worker (Shared) ─────────────────────────
   worker:
     build:
       context: ./resume-parser-main
@@ -121,7 +192,7 @@ services:
         max-size: "20m"
         max-file: "5"
 
-  # ─── 6. Redis Message Broker & Queue ──────────────────────────────
+  # ─── 8. Redis Message Broker & Queue (Shared) ─────────────────────
   redis:
     image: redis:alpine
     container_name: ats_redis
@@ -135,7 +206,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # ─── 7. Keycloak Identity Provider (Optional) ─────────────────────
+  # ─── 9. Keycloak Identity Provider (Shared) ───────────────────────
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     container_name: ats_keycloak
