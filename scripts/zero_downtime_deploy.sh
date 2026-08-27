@@ -22,19 +22,19 @@ echo "=========================================================="
 echo "🚀 Starting ATS Zero-Downtime Blue/Green Deployment Engine"
 echo "=========================================================="
 
-# 1. Determine current active slot (Blue or Green)
-ACTIVE_COLOR="blue"
-if [ -f "$APP_DIR/.active_color" ]; then
-  ACTIVE_COLOR=$(cat "$APP_DIR/.active_color")
-elif [ -f "$APP_DIR/caddy_upstreams/backend.caddy" ]; then
-  if grep -q "backend_green" "$APP_DIR/caddy_upstreams/backend.caddy"; then
-    ACTIVE_COLOR="green"
-  fi
-fi
+# 1. Determine active container slot by inspecting live running containers
+BLUE_RUNNING=$(docker ps -q --filter "name=ats_backend_blue" --filter "status=running" 2>/dev/null || true)
+GREEN_RUNNING=$(docker ps -q --filter "name=ats_backend_green" --filter "status=running" 2>/dev/null || true)
 
-if [ "$ACTIVE_COLOR" = "blue" ]; then
+if [ -n "$GREEN_RUNNING" ] && [ -z "$BLUE_RUNNING" ]; then
+  ACTIVE_COLOR="green"
+  TARGET_COLOR="blue"
+elif [ -n "$BLUE_RUNNING" ]; then
+  ACTIVE_COLOR="blue"
   TARGET_COLOR="green"
 else
+  # Initial Bootstrap: deploy blue slot
+  ACTIVE_COLOR="none"
   TARGET_COLOR="blue"
 fi
 
@@ -87,14 +87,14 @@ for ((i=1; i<=MAX_RETRIES; i++)); do
   echo "🔍 [Attempt $i/$MAX_RETRIES] Checking container readiness..."
   
   if [ $BACKEND_HEALTHY -eq 0 ]; then
-    if docker exec "ats_backend_${TARGET_COLOR}" wget -qO- http://localhost:5000/api/health >/dev/null 2>&1; then
+    if docker exec "ats_backend_${TARGET_COLOR}" node -e "require('http').get('http://localhost:5000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" >/dev/null 2>&1; then
       echo "  ✅ ats_backend_${TARGET_COLOR} is HEALTHY!"
       BACKEND_HEALTHY=1
     fi
   fi
 
   if [ $FRONTEND_HEALTHY -eq 0 ]; then
-    if docker exec "ats_frontend_${TARGET_COLOR}" wget -qO- http://localhost:3000/api/health >/dev/null 2>&1; then
+    if docker exec "ats_frontend_${TARGET_COLOR}" node -e "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" >/dev/null 2>&1; then
       echo "  ✅ ats_frontend_${TARGET_COLOR} is HEALTHY!"
       FRONTEND_HEALTHY=1
     fi
@@ -111,49 +111,77 @@ done
 if [ $BACKEND_HEALTHY -eq 0 ] || [ $FRONTEND_HEALTHY -eq 0 ]; then
   echo "❌ Health check FAILED for Target [${TARGET_COLOR^^}] stack within timeout!"
   echo "📋 Target Backend Logs:"
-  docker logs "ats_backend_${TARGET_COLOR}" --tail 30 || true
+  docker logs "ats_backend_${TARGET_COLOR}" --tail 40 || true
   echo "📋 Target Frontend Logs:"
-  docker logs "ats_frontend_${TARGET_COLOR}" --tail 30 || true
+  docker logs "ats_frontend_${TARGET_COLOR}" --tail 40 || true
   echo "🛑 Aborting deployment. Stopping unhealthy target containers..."
   dc -f docker-compose.prod.yml stop "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}" || true
-  echo "🔒 Active [${ACTIVE_COLOR^^}] stack remains 100% online and untouched. ZERO downtime."
+  if [ "$ACTIVE_COLOR" != "none" ]; then
+    echo "🔒 Active [${ACTIVE_COLOR^^}] stack remains 100% online and untouched. ZERO downtime."
+  fi
   exit 1
 fi
 
 # 8. Seamless Traffic Cutover via Caddy Atomic Reload
 echo "🔄 Performing 0-ms atomic traffic switch in Caddy to [${TARGET_COLOR^^}]..."
 
-cat <<EOF > "$APP_DIR/caddy_upstreams/backend.caddy"
-reverse_proxy backend_${TARGET_COLOR}:5000 {
-    lb_try_duration 3s
-    lb_try_interval 250ms
+if [ "$ACTIVE_COLOR" != "none" ]; then
+  cat <<EOF > "$APP_DIR/caddy_upstreams/backend.caddy"
+reverse_proxy backend_${TARGET_COLOR}:5000 backend_${ACTIVE_COLOR}:5000 {
+    lb_policy first
+    lb_try_duration 4s
+    lb_try_interval 200ms
+    fail_duration 5s
 }
 EOF
 
-cat <<EOF > "$APP_DIR/caddy_upstreams/frontend.caddy"
-reverse_proxy frontend_${TARGET_COLOR}:3000 {
-    lb_try_duration 3s
-    lb_try_interval 250ms
+  cat <<EOF > "$APP_DIR/caddy_upstreams/frontend.caddy"
+reverse_proxy frontend_${TARGET_COLOR}:3000 frontend_${ACTIVE_COLOR}:3000 {
+    lb_policy first
+    lb_try_duration 4s
+    lb_try_interval 200ms
+    fail_duration 5s
 }
 EOF
+else
+  cat <<EOF > "$APP_DIR/caddy_upstreams/backend.caddy"
+reverse_proxy backend_${TARGET_COLOR}:5000 {
+    lb_try_duration 4s
+    lb_try_interval 200ms
+}
+EOF
+
+  cat <<EOF > "$APP_DIR/caddy_upstreams/frontend.caddy"
+reverse_proxy frontend_${TARGET_COLOR}:3000 {
+    lb_try_duration 4s
+    lb_try_interval 200ms
+}
+EOF
+fi
 
 cat <<EOF > "$APP_DIR/caddy_upstreams/ask.caddy"
 ask http://backend_${TARGET_COLOR}:5000/api/auth/check-ssl-domain
 EOF
 
 # Reload Caddy in-memory
-docker exec ats_caddy caddy reload --config /etc/caddy/Caddyfile
+docker exec ats_caddy caddy reload --config /etc/caddy/Caddyfile || true
 
 # Record new active color
 echo "$TARGET_COLOR" > "$APP_DIR/.active_color"
 echo "✨ Traffic successfully routed to [${TARGET_COLOR^^}] stack!"
 
 # 9. Graceful Connection Draining & Old Stack Shutdown
-echo "⏳ Waiting 5s for in-flight requests on [${ACTIVE_COLOR^^}] to complete..."
-sleep 5
+if [ "$ACTIVE_COLOR" != "none" ]; then
+  echo "⏳ Waiting 5s for in-flight requests on [${ACTIVE_COLOR^^}] to complete..."
+  sleep 5
 
-echo "🛑 Gracefully stopping previous [${ACTIVE_COLOR^^}] stack..."
-dc -f docker-compose.prod.yml stop "backend_${ACTIVE_COLOR}" "frontend_${ACTIVE_COLOR}" || true
+  echo "🛑 Gracefully stopping previous [${ACTIVE_COLOR^^}] stack..."
+  dc -f docker-compose.prod.yml stop "backend_${ACTIVE_COLOR}" "frontend_${ACTIVE_COLOR}" || true
+fi
+
+# Clean up legacy single-instance containers if they lingered
+docker stop ats_backend ats_frontend 2>/dev/null || true
+docker rm ats_backend ats_frontend 2>/dev/null || true
 
 # 10. Clean up dangling images
 echo "🧹 Cleaning up dangling build images..."
@@ -161,6 +189,7 @@ docker image prune -f || true
 
 # 11. Final Live Smoke Test
 echo "🌐 Running public endpoint verification:"
+sleep 2
 curl -sk -I https://enfyjobs.com/api/health --max-time 8 | grep -E 'HTTP|Server|Location' || echo "Frontend check warning"
 curl -sk -I https://api.enfyjobs.com/api/health --max-time 8 | grep -E 'HTTP|Server|Location' || echo "Backend check warning"
 

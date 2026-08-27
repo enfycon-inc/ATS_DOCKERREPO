@@ -1,4 +1,6 @@
-reverse_proxy frontend_blue:3000 {
-    lb_try_duration 3s
-    lb_try_interval 250ms
+reverse_proxy frontend_blue:3000 frontend_green:3000 {
+    lb_policy first
+    lb_try_duration 4s
+    lb_try_interval 200ms
+    fail_duration 5s
 }
