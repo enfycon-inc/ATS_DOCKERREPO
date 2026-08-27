@@ -80,7 +80,7 @@ dc -f docker-compose.prod.yml up -d "backend_${TARGET_COLOR}" "frontend_${TARGET
 echo "🩺 Verifying health of Target [${TARGET_COLOR^^}] containers before traffic cutover..."
 BACKEND_HEALTHY=0
 FRONTEND_HEALTHY=0
-MAX_RETRIES=30
+MAX_RETRIES=60
 RETRY_INTERVAL=2
 
 for ((i=1; i<=MAX_RETRIES; i++)); do
