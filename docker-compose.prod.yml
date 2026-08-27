@@ -67,6 +67,8 @@ services:
       - PYTHON_PARSER_URL=http://api:8000
       - BASE_DOMAIN=enfyjobs.com
       - FRONTEND_URL=https://enfyjobs.com
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
     depends_on:
       - redis
       - api
@@ -130,6 +132,8 @@ services:
       - PYTHON_PARSER_URL=http://api:8000
       - BASE_DOMAIN=enfyjobs.com
       - FRONTEND_URL=https://enfyjobs.com
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
     depends_on:
       - redis
       - api
@@ -211,12 +215,15 @@ services:
     image: quay.io/keycloak/keycloak:24.0
     container_name: ats_keycloak
     restart: always
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
     env_file:
       - path: ./ats_backend/.env
         required: false
-    command: start-dev
+    command: start-dev --import-realm
     volumes:
-      - ./keycloak/import:/opt/keycloak/data/import
+      - ./keycloak/imports:/opt/keycloak/data/import
     logging:
       driver: "json-file"
       options:
