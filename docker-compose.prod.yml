@@ -1,4 +1,27 @@
 services:
+  # ─── 0. PostgreSQL — Single DB, 3 schemas (ats, mass_mail, keycloak) ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: ats_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ats_db
+      POSTGRES_USER: ats_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ats_user -d ats_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ─── 1. Caddy Reverse Proxy & Automatic SSL Engine ────────────────
   caddy:
     image: caddy:2-alpine
@@ -70,8 +93,12 @@ services:
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
     depends_on:
-      - redis
-      - api
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      api:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 4s
@@ -135,8 +162,12 @@ services:
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
     depends_on:
-      - redis
-      - api
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      api:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 4s
@@ -218,10 +249,18 @@ services:
     environment:
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
-    env_file:
-      - path: ./ats_backend/.env
-        required: false
-    command: start-dev --import-realm
+      - KC_HTTP_ENABLED=true
+      - KC_HOSTNAME_STRICT=false
+      # ── Docker PostgreSQL (keycloak schema) ──
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres:5432/ats_db
+      - KC_DB_USERNAME=ats_user
+      - KC_DB_PASSWORD=${POSTGRES_PASSWORD}
+      - KC_DB_SCHEMA=keycloak
+    command: start --import-realm
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./keycloak/imports:/opt/keycloak/data/import
     logging:
@@ -234,3 +273,4 @@ volumes:
   caddy_data:
   caddy_config:
   redis_data:
+  postgres_data:
