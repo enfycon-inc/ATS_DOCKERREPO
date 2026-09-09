@@ -104,9 +104,9 @@ fi
 
 # Ensure Keycloak is accepting connections before building/starting backend
 echo "⏳ Waiting for Keycloak to be ready on port 8080..."
-for i in {1..45}; do
-  if docker exec ats_keycloak bash -c "exec 3<>/dev/tcp/127.0.0.1/8080" >/dev/null 2>&1; then
-    echo "✅ Keycloak is ready on port 8080."
+for i in {1..35}; do
+  if curl -sf http://127.0.0.1:8080/realms/enfycon-ats >/dev/null 2>&1; then
+    echo "✅ Keycloak is ready and enfycon-ats realm is responsive."
     break
   fi
   sleep 2
