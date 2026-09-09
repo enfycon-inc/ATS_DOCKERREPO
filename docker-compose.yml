@@ -37,13 +37,17 @@ services:
     env_file:
       - ./resume-parser-main/.env
     environment:
+      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./resume-parser-main:/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: always
 
   # ─── 5. Celery Background Worker ──────────────────────────────────────
@@ -54,13 +58,18 @@ services:
     env_file:
       - ./resume-parser-main/.env
     environment:
+      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./resume-parser-main:/app
     depends_on:
-      - redis
-      - api
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      api:
+        condition: service_started
     restart: always
 
   # ─── 6. NestJS Backend (ATS Core API) ────────────────────────────────

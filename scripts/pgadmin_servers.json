@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "ATS PostgreSQL (ats_db)",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "ats_db",
+      "Username": "ats_user",
+      "SSLMode": "prefer"
+    }
+  }
+}
