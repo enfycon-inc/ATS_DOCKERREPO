@@ -72,6 +72,13 @@ if [ "$PG_STATUS" = "exited" ] || [ "$PG_HEALTH" = "unhealthy" ]; then
   echo "⚠️ Detected unhealthy/exited ats_postgres container, removing for clean initialization..."
   docker rm -f ats_postgres 2>/dev/null || true
 fi
+
+KC_STATUS=$(docker inspect -f '{{.State.Status}}' ats_keycloak 2>/dev/null || true)
+if [ "$KC_STATUS" = "restarting" ] || [ "$KC_STATUS" = "exited" ]; then
+  echo "⚠️ Detected unhealthy/restarting ats_keycloak container, removing for clean start..."
+  docker rm -f ats_keycloak 2>/dev/null || true
+fi
+
 dc -f docker-compose.prod.yml up -d postgres redis api worker keycloak caddy
 
 # Ensure PostgreSQL is accepting connections and schemas are initialized
@@ -88,12 +95,22 @@ done
 docker exec ats_postgres psql -U ats_user -d ats_db -c "ALTER DATABASE ats_db SET search_path = ats, mass_mail, public; ALTER USER ats_user SET search_path = ats, mass_mail, public;" || true
 docker exec -i ats_postgres psql -U ats_user -d ats_db < scripts/init-schemas.sql || true
 
-# Seed database if users table is empty or missing
-USER_COUNT=$(docker exec ats_postgres psql -U ats_user -d ats_db -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'ats' AND table_name = 'users';" 2>/dev/null || echo "0")
-if [ "$USER_COUNT" = "0" ]; then
-  echo "📦 Initializing production database with seed data..."
+# Seed database if users table is empty
+ACTUAL_USERS=$(docker exec ats_postgres psql -U ats_user -d ats_db -tAc "SELECT count(*) FROM ats.users;" 2>/dev/null || echo "0")
+if [ "$ACTUAL_USERS" = "0" ]; then
+  echo "📦 Database has 0 users. Initializing production database with seed data..."
   docker exec -i ats_postgres psql -U ats_user -d ats_db < scripts/production_seed_data.sql || true
 fi
+
+# Ensure Keycloak is accepting connections before building/starting backend
+echo "⏳ Waiting for Keycloak to be ready on port 8080..."
+for i in {1..45}; do
+  if docker exec ats_keycloak bash -c "exec 3<>/dev/tcp/127.0.0.1/8080" >/dev/null 2>&1; then
+    echo "✅ Keycloak is ready on port 8080."
+    break
+  fi
+  sleep 2
+done
 
 # 5. Build Target Slot Docker images
 echo "🐳 Building Target [${TARGET_COLOR^^}] Docker containers in parallel..."

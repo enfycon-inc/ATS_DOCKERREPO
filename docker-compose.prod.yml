@@ -127,6 +127,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
       redis:
         condition: service_started
       api:
@@ -218,6 +220,8 @@ services:
       - DEB_ADMIN_PASSWORD=enfycon123
     depends_on:
       postgres:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
       redis:
         condition: service_started
@@ -334,7 +338,7 @@ services:
       - KEYCLOAK_ADMIN_PASSWORD=admin
       - KC_HTTP_ENABLED=true
       - KC_HOSTNAME_STRICT=false
-      - KC_PROXY=edge
+      - KC_PROXY_HEADERS=xforwarded
       # ── Docker PostgreSQL (keycloak schema) ──
       - KC_DB=postgres
       - KC_DB_URL=jdbc:postgresql://postgres:5432/ats_db
@@ -344,6 +348,12 @@ services:
       # JVM memory caps tailored to container limit (768M heap inside 1024M container)
       - JAVA_OPTS_APPEND=-Xms256m -Xmx768m -XX:+UseG1GC
     command: start-dev --import-realm
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 25s
     depends_on:
       postgres:
         condition: service_healthy

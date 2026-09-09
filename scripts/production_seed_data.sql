@@ -1,8 +1,8 @@
-﻿--
+--
 -- PostgreSQL database dump
 --
 
-\restrict KerfP1pgnsBGeK6KINdsHY6KDPixvqhbB7g3BGyyYFI0wVeLRt8fDXZmgXpeOZt
+-- \restrict KerfP1pgnsBGeK6KINdsHY6KDPixvqhbB7g3BGyyYFI0wVeLRt8fDXZmgXpeOZt
 
 -- Dumped from database version 16.15
 -- Dumped by pg_dump version 16.15
@@ -8805,5 +8805,5 @@ ALTER TABLE ONLY mass_mail.recipients
 -- PostgreSQL database dump complete
 --
 
-\unrestrict KerfP1pgnsBGeK6KINdsHY6KDPixvqhbB7g3BGyyYFI0wVeLRt8fDXZmgXpeOZt
+-- \unrestrict KerfP1pgnsBGeK6KINdsHY6KDPixvqhbB7g3BGyyYFI0wVeLRt8fDXZmgXpeOZt
 
