@@ -38,6 +38,8 @@ Point your domain to your **AWS VPS Public IP address**:
 | **A** | `*.enfyjobs.com` | `<AWS_VPS_PUBLIC_IP>` | Wildcard for all tenant subdomains (e.g. `deb.enfyjobs.com`) |
 | **A** | `enfyjobs.com` | `<AWS_VPS_PUBLIC_IP>` | Root domain |
 | **A** | `api.enfyjobs.com` | `<AWS_VPS_PUBLIC_IP>` | Dedicated Backend API endpoint |
+| **A** | `auth.enfyjobs.com` | `<AWS_VPS_PUBLIC_IP>` | Keycloak Identity & SSO Provider |
+| **A** | `db.enfyjobs.com` | `<AWS_VPS_PUBLIC_IP>` | pgAdmin 4 Database Web Console & PostgreSQL |
 
 *(Note: Caddy automatically requests and renews valid SSL certificates for all subdomains and custom domains on the fly!)*
 

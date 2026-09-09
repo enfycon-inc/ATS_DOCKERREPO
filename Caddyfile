@@ -17,7 +17,19 @@ enfyjobs.com {
     import /etc/caddy/upstreams/frontend.caddy
 }
 
-# ─── 3. Dynamic Multi-Tenant Subdomains & Custom Client Domains ──────
+# ─── 3. Keycloak Identity Provider ──────────────────────────────────
+auth.enfyjobs.com {
+    encode gzip zstd
+    reverse_proxy keycloak:8080
+}
+
+# ─── 4. Database Web Console (pgAdmin 4) ────────────────────────────
+db.enfyjobs.com, db.enfyjoobs.com {
+    encode gzip zstd
+    reverse_proxy pgadmin:80
+}
+
+# ─── 5. Dynamic Multi-Tenant Subdomains & Custom Client Domains ──────
 :443 {
     tls {
         on_demand
