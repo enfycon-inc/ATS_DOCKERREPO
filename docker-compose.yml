@@ -13,6 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql:ro
+      - ./scripts/production_seed_data.sql:/docker-entrypoint-initdb.d/02-seed-data.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ats_user -d ats_db"]
       interval: 5s
@@ -68,6 +69,8 @@ services:
     container_name: ats_backend_dev
     ports:
       - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db?schema=ats
     env_file:
       - ./ats_backend/.env
     volumes:
