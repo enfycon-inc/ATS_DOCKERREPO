@@ -91,8 +91,8 @@ services:
     container_name: ats_keycloak_dev
     command: start-dev
     environment:
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - KC_HTTP_ENABLED=true
       - KC_HOSTNAME_STRICT=false
       # ── PostgreSQL connection (keycloak schema) ──

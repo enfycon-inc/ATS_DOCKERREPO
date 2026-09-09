@@ -74,7 +74,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
-      - AUTH_SECRET=1kc7Cf4Z2V2XX0WfGLrET9iZzWyDkar9RlqjIK3Vkxo
+      - AUTH_SECRET=${AUTH_SECRET}
       - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
@@ -119,15 +119,12 @@ services:
       - FRONTEND_URL=https://enfyjobs.com
       - KEYCLOAK_ISSUER=http://keycloak:8080/realms/enfycon-ats
       - KEYCLOAK_CLIENT_ID=enfycon-ats
-      - KEYCLOAK_CLIENT_SECRET=mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - PLATFORM_ADMIN_EMAIL=${PLATFORM_ADMIN_EMAIL:-admin@enfycon.com}
       - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-enfycon123}
       - PLATFORM_ADMIN_NAME=${PLATFORM_ADMIN_NAME:-Enfy Super Admin}
-      - DEB_ADMIN_EMAIL=${DEB_ADMIN_EMAIL:-imsahadeb@gmail.com}
-      - DEB_ADMIN_PASSWORD=${DEB_ADMIN_PASSWORD:-enfycon123}
-      - DEB_ADMIN_NAME=${DEB_ADMIN_NAME:-Sahadeb Barman}
     depends_on:
       postgres:
         condition: service_healthy
@@ -172,7 +169,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
-      - AUTH_SECRET=1kc7Cf4Z2V2XX0WfGLrET9iZzWyDkar9RlqjIK3Vkxo
+      - AUTH_SECRET=${AUTH_SECRET}
       - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
@@ -217,15 +214,12 @@ services:
       - FRONTEND_URL=https://enfyjobs.com
       - KEYCLOAK_ISSUER=http://keycloak:8080/realms/enfycon-ats
       - KEYCLOAK_CLIENT_ID=enfycon-ats
-      - KEYCLOAK_CLIENT_SECRET=mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - PLATFORM_ADMIN_EMAIL=${PLATFORM_ADMIN_EMAIL:-admin@enfycon.com}
       - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-enfycon123}
       - PLATFORM_ADMIN_NAME=${PLATFORM_ADMIN_NAME:-Enfy Super Admin}
-      - DEB_ADMIN_EMAIL=${DEB_ADMIN_EMAIL:-imsahadeb@gmail.com}
-      - DEB_ADMIN_PASSWORD=${DEB_ADMIN_PASSWORD:-enfycon123}
-      - DEB_ADMIN_NAME=${DEB_ADMIN_NAME:-Sahadeb Barman}
     depends_on:
       postgres:
         condition: service_healthy
@@ -343,8 +337,8 @@ services:
     restart: always
     command: start-dev
     environment:
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - KC_HTTP_ENABLED=true
       - KC_HOSTNAME_STRICT=false
       # ── Docker PostgreSQL (keycloak schema) ──
