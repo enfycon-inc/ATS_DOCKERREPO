@@ -122,9 +122,12 @@ services:
       - KEYCLOAK_CLIENT_SECRET=mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
-      - PLATFORM_ADMIN_EMAIL=admin@enfycon.com
-      - PLATFORM_ADMIN_PASSWORD=enfycon123
-      - DEB_ADMIN_PASSWORD=enfycon123
+      - PLATFORM_ADMIN_EMAIL=${PLATFORM_ADMIN_EMAIL:-admin@enfycon.com}
+      - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-enfycon123}
+      - PLATFORM_ADMIN_NAME=${PLATFORM_ADMIN_NAME:-Enfy Super Admin}
+      - DEB_ADMIN_EMAIL=${DEB_ADMIN_EMAIL:-imsahadeb@gmail.com}
+      - DEB_ADMIN_PASSWORD=${DEB_ADMIN_PASSWORD:-enfycon123}
+      - DEB_ADMIN_NAME=${DEB_ADMIN_NAME:-Sahadeb Barman}
     depends_on:
       postgres:
         condition: service_healthy
@@ -217,9 +220,12 @@ services:
       - KEYCLOAK_CLIENT_SECRET=mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
-      - PLATFORM_ADMIN_EMAIL=admin@enfycon.com
-      - PLATFORM_ADMIN_PASSWORD=enfycon123
-      - DEB_ADMIN_PASSWORD=enfycon123
+      - PLATFORM_ADMIN_EMAIL=${PLATFORM_ADMIN_EMAIL:-admin@enfycon.com}
+      - PLATFORM_ADMIN_PASSWORD=${PLATFORM_ADMIN_PASSWORD:-enfycon123}
+      - PLATFORM_ADMIN_NAME=${PLATFORM_ADMIN_NAME:-Enfy Super Admin}
+      - DEB_ADMIN_EMAIL=${DEB_ADMIN_EMAIL:-imsahadeb@gmail.com}
+      - DEB_ADMIN_PASSWORD=${DEB_ADMIN_PASSWORD:-enfycon123}
+      - DEB_ADMIN_NAME=${DEB_ADMIN_NAME:-Sahadeb Barman}
     depends_on:
       postgres:
         condition: service_healthy
