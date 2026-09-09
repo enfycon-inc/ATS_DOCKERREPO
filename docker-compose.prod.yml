@@ -7,16 +7,17 @@ services:
     environment:
       POSTGRES_DB: ats_db
       POSTGRES_USER: ats_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-AtsDevPass2024}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql:ro
       - ./scripts/production_seed_data.sql:/docker-entrypoint-initdb.d/02-seed-data.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ats_user -d ats_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      interval: 4s
+      timeout: 4s
+      retries: 25
+      start_period: 20s
     deploy:
       resources:
         limits:
@@ -107,6 +108,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
+      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db?schema=ats
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - PYTHON_PARSER_URL=http://api:8000
@@ -190,6 +192,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
+      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db?schema=ats
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - PYTHON_PARSER_URL=http://api:8000
@@ -319,7 +322,7 @@ services:
       - KC_DB=postgres
       - KC_DB_URL=jdbc:postgresql://postgres:5432/ats_db
       - KC_DB_USERNAME=ats_user
-      - KC_DB_PASSWORD=${POSTGRES_PASSWORD}
+      - KC_DB_PASSWORD=${POSTGRES_PASSWORD:-AtsDevPass2024}
       - KC_DB_SCHEMA=keycloak
       # JVM memory caps tailored to container limit (768M heap inside 1024M container)
       - JAVA_OPTS_APPEND=-Xms256m -Xmx768m -XX:+UseG1GC

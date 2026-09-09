@@ -15,7 +15,7 @@ APP_DIR="/var/www/ats"
 cd "$APP_DIR"
 
 dc() {
-  env -i PATH="$PATH" HOME="$HOME" USER="$USER" docker compose "$@"
+  env -i PATH="$PATH" HOME="$HOME" USER="$USER" POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-AtsDevPass2024}" docker compose "$@"
 }
 
 echo "=========================================================="
@@ -64,9 +64,15 @@ else
   git clone git@github.com:enfycon-inc/resume-parser.git resume-parser-main
 fi
 
-# 4. Ensure shared infrastructure is up (Redis, Resume Parser, Celery, Keycloak, Caddy)
+# 4. Ensure shared infrastructure is up (Postgres, Redis, Resume Parser, Celery, Keycloak, Caddy)
 echo "⚡ Ensuring shared core infrastructure is running..."
-dc -f docker-compose.prod.yml up -d --no-recreate redis api worker keycloak caddy
+PG_STATUS=$(docker inspect -f '{{.State.Status}}' ats_postgres 2>/dev/null || true)
+PG_HEALTH=$(docker inspect -f '{{.State.Health.Status}}' ats_postgres 2>/dev/null || true)
+if [ "$PG_STATUS" = "exited" ] || [ "$PG_HEALTH" = "unhealthy" ]; then
+  echo "⚠️ Detected unhealthy/exited ats_postgres container, removing for clean initialization..."
+  docker rm -f ats_postgres 2>/dev/null || true
+fi
+dc -f docker-compose.prod.yml up -d postgres redis api worker keycloak caddy
 
 # 5. Build Target Slot Docker images
 echo "🐳 Building Target [${TARGET_COLOR^^}] Docker containers in parallel..."
