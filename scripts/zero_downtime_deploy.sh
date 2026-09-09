@@ -74,6 +74,27 @@ if [ "$PG_STATUS" = "exited" ] || [ "$PG_HEALTH" = "unhealthy" ]; then
 fi
 dc -f docker-compose.prod.yml up -d postgres redis api worker keycloak caddy
 
+# Ensure PostgreSQL is accepting connections and schemas are initialized
+echo "⏳ Waiting for PostgreSQL to be ready..."
+for i in {1..30}; do
+  if docker exec ats_postgres pg_isready -U ats_user -d ats_db >/dev/null 2>&1; then
+    echo "✅ PostgreSQL is ready."
+    break
+  fi
+  sleep 1
+done
+
+# Ensure search_path is set permanently on both database and user
+docker exec ats_postgres psql -U ats_user -d ats_db -c "ALTER DATABASE ats_db SET search_path = ats, mass_mail, public; ALTER USER ats_user SET search_path = ats, mass_mail, public;" || true
+docker exec -i ats_postgres psql -U ats_user -d ats_db < scripts/init-schemas.sql || true
+
+# Seed database if users table is empty or missing
+USER_COUNT=$(docker exec ats_postgres psql -U ats_user -d ats_db -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'ats' AND table_name = 'users';" 2>/dev/null || echo "0")
+if [ "$USER_COUNT" = "0" ]; then
+  echo "📦 Initializing production database with seed data..."
+  docker exec -i ats_postgres psql -U ats_user -d ats_db < scripts/production_seed_data.sql || true
+fi
+
 # 5. Build Target Slot Docker images
 echo "🐳 Building Target [${TARGET_COLOR^^}] Docker containers in parallel..."
 dc -f docker-compose.prod.yml build --parallel "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}"

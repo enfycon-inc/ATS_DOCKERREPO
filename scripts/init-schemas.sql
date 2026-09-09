@@ -51,3 +51,8 @@ CREATE OPERATOR = (
   PROCEDURE = text_eq_uuid,
   COMMUTATOR = =
 );
+
+-- ─── Configure Default search_path ─────────────────────────
+ALTER USER ats_user SET search_path = ats, mass_mail, public;
+ALTER DATABASE ats_db SET search_path = ats, mass_mail, public;
+
