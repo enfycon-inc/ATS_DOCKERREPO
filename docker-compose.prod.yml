@@ -74,6 +74,8 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
+      - AUTH_SECRET=1kc7Cf4Z2V2XX0WfGLrET9iZzWyDkar9RlqjIK3Vkxo
+      - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 4s
@@ -114,6 +116,9 @@ services:
       - PYTHON_PARSER_URL=http://api:8000
       - BASE_DOMAIN=enfyjobs.com
       - FRONTEND_URL=https://enfyjobs.com
+      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/enfycon-ats
+      - KEYCLOAK_CLIENT_ID=enfycon-ats
+      - KEYCLOAK_CLIENT_SECRET=mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
     depends_on:
@@ -158,6 +163,8 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
+      - AUTH_SECRET=1kc7Cf4Z2V2XX0WfGLrET9iZzWyDkar9RlqjIK3Vkxo
+      - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 4s
@@ -198,6 +205,9 @@ services:
       - PYTHON_PARSER_URL=http://api:8000
       - BASE_DOMAIN=enfyjobs.com
       - FRONTEND_URL=https://enfyjobs.com
+      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/enfycon-ats
+      - KEYCLOAK_CLIENT_ID=enfycon-ats
+      - KEYCLOAK_CLIENT_SECRET=mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
     depends_on:
