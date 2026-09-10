@@ -353,7 +353,7 @@ services:
       - KC_HTTP_ENABLED=true
       - KC_HOSTNAME_STRICT=false
       - KC_PROXY_HEADERS=xforwarded
-      - KC_HOSTNAME=https://auth.enfyjobs.com
+      - KC_HOSTNAME=auth.enfyjobs.com
       # ── Docker PostgreSQL (keycloak schema) ──
       - KC_DB=postgres
       - KC_DB_URL=jdbc:postgresql://postgres:5432/ats_db
