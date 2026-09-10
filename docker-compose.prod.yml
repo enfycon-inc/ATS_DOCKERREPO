@@ -76,7 +76,9 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
-      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_SECRET=${AUTH_SECRET:-1kc7Cf4Z2V2XX0WfGLrET9iZzWyDkar9RlqjIK3Vkxo}
+      - NEXTAUTH_URL=https://enfyjobs.com
+      - NEXTAUTH_URL_INTERNAL=http://frontend_blue:3000
       - INTERNAL_API_URL=http://backend_blue:5000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
       - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
@@ -173,7 +175,9 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
-      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_SECRET=${AUTH_SECRET:-1kc7Cf4Z2V2XX0WfGLrET9iZzWyDkar9RlqjIK3Vkxo}
+      - NEXTAUTH_URL=https://enfyjobs.com
+      - NEXTAUTH_URL_INTERNAL=http://frontend_green:3000
       - INTERNAL_API_URL=http://backend_green:5000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
       - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
