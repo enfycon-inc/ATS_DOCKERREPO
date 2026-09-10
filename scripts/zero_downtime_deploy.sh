@@ -79,7 +79,7 @@ if [ "$KC_STATUS" = "restarting" ] || [ "$KC_STATUS" = "exited" ]; then
   docker rm -f ats_keycloak 2>/dev/null || true
 fi
 
-dc -f docker-compose.prod.yml up -d postgres redis api worker keycloak caddy
+dc -f docker-compose.prod.yml up -d postgres redis api worker keycloak pgadmin caddy
 
 # Ensure PostgreSQL is accepting connections and schemas are initialized
 echo "⏳ Waiting for PostgreSQL to be ready..."
