@@ -121,7 +121,7 @@ services:
       - FRONTEND_URL=https://enfyjobs.com
       - KEYCLOAK_ISSUER=http://keycloak:8080/realms/enfycon-ats
       - KEYCLOAK_CLIENT_ID=enfycon-ats
-      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn}
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - PLATFORM_ADMIN_EMAIL=${PLATFORM_ADMIN_EMAIL:-admin@enfycon.com}
@@ -216,7 +216,7 @@ services:
       - FRONTEND_URL=https://enfyjobs.com
       - KEYCLOAK_ISSUER=http://keycloak:8080/realms/enfycon-ats
       - KEYCLOAK_CLIENT_ID=enfycon-ats
-      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn}
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
       - PLATFORM_ADMIN_EMAIL=${PLATFORM_ADMIN_EMAIL:-admin@enfycon.com}
