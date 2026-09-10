@@ -118,6 +118,7 @@ dc -f docker-compose.prod.yml build --parallel "backend_${TARGET_COLOR}" "fronte
 
 # 6. Launch Target Slot containers
 echo "🚀 Starting Target [${TARGET_COLOR^^}] containers..."
+docker rm -f "ats_backend_${TARGET_COLOR}" "ats_frontend_${TARGET_COLOR}" 2>/dev/null || true
 dc -f docker-compose.prod.yml up -d "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}"
 
 # 7. Health Check Verification Gate
