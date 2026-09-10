@@ -79,6 +79,7 @@ services:
       - INTERNAL_API_URL=http://backend_blue:5000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
       - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
+      - KEYCLOAK_REFRESH_TOKEN_TTL_SECONDS=86400
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 4s
@@ -175,6 +176,7 @@ services:
       - INTERNAL_API_URL=http://backend_green:5000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
       - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
+      - KEYCLOAK_REFRESH_TOKEN_TTL_SECONDS=86400
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 4s
