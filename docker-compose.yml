@@ -79,7 +79,8 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db?schema=ats
+      - DATABASE_URL=${DATABASE_URL:-postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@13.55.100.200:5432/ats_db?schema=ats&options=-csearch_path%3Dats,mass_mail,public}
+      - KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER:-https://auth.enfyjobs.com/realms/enfycon-ats}
     env_file:
       - ./ats_backend/.env
     volumes:
