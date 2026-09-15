@@ -15,7 +15,7 @@ APP_DIR="/var/www/ats"
 cd "$APP_DIR"
 
 dc() {
-  env -i PATH="$PATH" HOME="$HOME" USER="$USER" POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-AtsDevPass2024}" docker compose "$@"
+  env -i PATH="$PATH" HOME="$HOME" USER="$USER" POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-AtsDevPass2024}" COMPOSE_PROJECT_NAME="ats" docker compose "$@"
 }
 
 echo "=========================================================="
@@ -118,8 +118,8 @@ dc -f docker-compose.prod.yml build --parallel "backend_${TARGET_COLOR}" "fronte
 
 # 6. Launch Target Slot containers
 echo "🚀 Starting Target [${TARGET_COLOR^^}] containers..."
-dc -f docker-compose.prod.yml rm -f -s -v "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}" 2>/dev/null || true
-docker rm -f "ats_backend_${TARGET_COLOR}" "ats_frontend_${TARGET_COLOR}" 2>/dev/null || true
+dc -f docker-compose.prod.yml rm -f -s -v "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}" || true
+docker rm -f "ats_backend_${TARGET_COLOR}" "ats_frontend_${TARGET_COLOR}" || true
 dc -f docker-compose.prod.yml up -d --force-recreate "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}"
 
 # 7. Health Check Verification Gate
