@@ -118,8 +118,9 @@ dc -f docker-compose.prod.yml build --parallel "backend_${TARGET_COLOR}" "fronte
 
 # 6. Launch Target Slot containers
 echo "🚀 Starting Target [${TARGET_COLOR^^}] containers..."
+dc -f docker-compose.prod.yml rm -f -s -v "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}" 2>/dev/null || true
 docker rm -f "ats_backend_${TARGET_COLOR}" "ats_frontend_${TARGET_COLOR}" 2>/dev/null || true
-dc -f docker-compose.prod.yml up -d "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}"
+dc -f docker-compose.prod.yml up -d --force-recreate "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}"
 
 # 7. Health Check Verification Gate
 echo "🩺 Verifying health of Target [${TARGET_COLOR^^}] containers before traffic cutover..."
