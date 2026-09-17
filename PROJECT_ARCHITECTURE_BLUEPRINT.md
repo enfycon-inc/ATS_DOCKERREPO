@@ -51,6 +51,17 @@ graph TD
 - Subdomain strings (e.g., `deb.localhost:3000` -> tenant `deb`) are parsed dynamically by [subdomain-helper.ts](file:///c:/Users/enfyc/OneDrive/Desktop/ATS%20enfy/ats_frontend_main/utils/subdomain-helper.ts).
 - Backend enforces tenant isolation via the `tenant_id` database column constraint on tables `jobs`, `candidates`, `submissions`, and `clients`.
 
+### Member Role Assignments (September 2026)
+- The current user model has one `branch_id`; `assigned_role_ids` contains the member's complete custom-role selection. `role_id` is the primary role used by legacy joins and must be null or a member of that selection. They overlap for single-role members; neither column has been removed.
+- The Users & Teams branch-role picker submits exact UUIDs as `assignedRoleIds` to `PATCH /api/auth/users/:id`. Explicit selections replace existing assignments (including an empty selection); profile-only changes preserve them. The service resolves roles within the tenant and member's branch, validates before writing, and updates both role columns together. A same-named role in another branch must not be added implicitly.
+- Existing users' roles and permissions come from database assignments. Old tenant-role names in Keycloak tokens cannot restore removed access; the platform `SUPER_ADMIN` realm role remains authoritative. The JWT guard checks the saved user's update timestamp before reusing cached access data.
+- Relevant files: `ats_frontend_main/lib/member-role-selection.ts`, `ats_frontend_main/app/(dashboard)/utility/users/page.tsx`, and backend `auth-user.service.ts`, `auth-keycloak.service.ts`, `jwt-auth.guard.ts`.
+
+### Cross-Branch Job Delegation
+- The jobs table and context menu expose **Delegate Job** independently of edit permission, using fresh `job:delegate` capability data and the active/primary branch. Target branch labels show the branch name without its short code.
+- `GET /api/jobs/delegations` must precede `GET /api/jobs/:id` in the controller. Requests stay pending until the target branch accepts them using `job:accept_delegation`.
+- The current delegation schema stores SLA and notes. The form's requested position count is retained in the notes because there is no dedicated delegation-position column.
+
 ### Pod Assignment System vs. Unassigned Requisitions
 - **Auto Mapping (Pod System enabled):** New job postings are assigned to recruiter pods automatically using round-robin logic.
 - **Normal Flow (Pod System disabled):** Requisitions go into a shared pool.
