@@ -58,6 +58,8 @@ graph TD
 - Relevant files: `ats_frontend_main/lib/member-role-selection.ts`, `ats_frontend_main/app/(dashboard)/utility/users/page.tsx`, and backend `auth-user.service.ts`, `auth-keycloak.service.ts`, `jwt-auth.guard.ts`.
 
 ### Dashboard Perspective Selection
+- The profile API returns the configured `users.role_id` and its label/archetype, not a ranked role. Editing assignments preserves that primary role while it remains selected. Permissions still include all assigned roles.
+- `dashboard-preference.ts` remembers the last selected role in browser storage under a user-and-tenant-specific key. Logout keeps this preference. First login (or a removed saved role) uses the configured primary role; a different browser starts with that primary until a choice is saved there. Unscoped legacy storage does not establish a remembered preference for another login.
 - `ats_frontend_main/lib/dashboard-role.ts` resolves the same assigned role for the dashboard, profile dropdown, sidebar, and top navigation. An assigned saved override wins; otherwise the profile API's selected `roleId` wins, followed by an available assigned role. The role label and dashboard archetype come from that same record.
 - The dashboard waits for role definitions, including system roles, before rendering its widgets. Navigation reads the live profile instead of choosing the first role in the login session. New perspective switches store role IDs; legacy saved names are accepted only for assigned roles, and removed/foreign overrides are ignored.
 - A perspective selects presentation, not new permissions. Backend capability checks remain authoritative.
