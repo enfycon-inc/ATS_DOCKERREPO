@@ -57,6 +57,12 @@ graph TD
 - Existing users' roles and permissions come from database assignments. Old tenant-role names in Keycloak tokens cannot restore removed access; the platform `SUPER_ADMIN` realm role remains authoritative. The JWT guard checks the saved user's update timestamp before reusing cached access data.
 - Relevant files: `ats_frontend_main/lib/member-role-selection.ts`, `ats_frontend_main/app/(dashboard)/utility/users/page.tsx`, and backend `auth-user.service.ts`, `auth-keycloak.service.ts`, `jwt-auth.guard.ts`.
 
+### Dashboard Perspective Selection
+- `ats_frontend_main/lib/dashboard-role.ts` resolves the same assigned role for the dashboard, profile dropdown, sidebar, and top navigation. An assigned saved override wins; otherwise the profile API's selected `roleId` wins, followed by an available assigned role. The role label and dashboard archetype come from that same record.
+- The dashboard waits for role definitions, including system roles, before rendering its widgets. Navigation reads the live profile instead of choosing the first role in the login session. New perspective switches store role IDs; legacy saved names are accepted only for assigned roles, and removed/foreign overrides are ignored.
+- A perspective selects presentation, not new permissions. Backend capability checks remain authoritative.
+- Perspective switches use client-side navigation, keeping the shared sidebar mounted. Navigation publishes profile and role definitions together on first load, avoiding empty-menu reloads and intermediate menus from incomplete role data.
+
 ### Cross-Branch Job Delegation
 - The jobs table and context menu expose **Delegate Job** independently of edit permission, using fresh `job:delegate` capability data and the active/primary branch. Target branch labels show the branch name without its short code.
 - `GET /api/jobs/delegations` must precede `GET /api/jobs/:id` in the controller. Requests stay pending until the target branch accepts them using `job:accept_delegation`.
