@@ -58,6 +58,7 @@ graph TD
 - Relevant files: `ats_frontend_main/lib/member-role-selection.ts`, `ats_frontend_main/app/(dashboard)/utility/users/page.tsx`, and backend `auth-user.service.ts`, `auth-keycloak.service.ts`, `jwt-auth.guard.ts`.
 
 ### Dashboard Perspective Selection
+- On a hard refresh the authenticated server layout loads the profile and role catalog together, without shared caching, and passes this snapshot to the sidebar. Hydration uses the same role and menu snapshot instead of an empty menu followed by client refetch. The saved perspective is mirrored in a user/tenant-specific SameSite cookie so server rendering can select it; existing local-only preferences migrate when loaded. The sidebar expansion cookie is also respected. Failed server loading retains the browser-fetch fallback.
 - The profile API returns the configured `users.role_id` and its label/archetype, not a ranked role. Editing assignments preserves that primary role while it remains selected. Permissions still include all assigned roles.
 - `dashboard-preference.ts` remembers the last selected role in browser storage under a user-and-tenant-specific key. Logout keeps this preference. First login (or a removed saved role) uses the configured primary role; a different browser starts with that primary until a choice is saved there. Unscoped legacy storage does not establish a remembered preference for another login.
 - `ats_frontend_main/lib/dashboard-role.ts` resolves the same assigned role for the dashboard, profile dropdown, sidebar, and top navigation. An assigned saved override wins; otherwise the profile API's selected `roleId` wins, followed by an available assigned role. The role label and dashboard archetype come from that same record.
@@ -66,9 +67,14 @@ graph TD
 - Perspective switches use client-side navigation, keeping the shared sidebar mounted. Navigation publishes profile and role definitions together on first load, avoiding empty-menu reloads and intermediate menus from incomplete role data.
 
 ### Cross-Branch Job Delegation
+- `GET /api/branches/delegation-targets` requires `job:delegate` and returns only target IDs and names. The delegation picker uses this endpoint; it does not require access to another branch's settings, staff, or hierarchy.
 - The jobs table and context menu expose **Delegate Job** independently of edit permission, using fresh `job:delegate` capability data and the active/primary branch. Target branch labels show the branch name without its short code.
 - `GET /api/jobs/delegations` must precede `GET /api/jobs/:id` in the controller. Requests stay pending until the target branch accepts them using `job:accept_delegation`.
 - The current delegation schema stores SLA and notes. The form's requested position count is retained in the notes because there is no dedicated delegation-position column.
+
+### Branch Settings and Remarks
+- `/settings/branch` loads the live profile first. Branch-scoped users fetch only their assigned branch and see its settings form directly, with an Add / Manage Remarks action. The branch directory, view toggles, search, and totals are reserved for tenant administration capabilities.
+- Branch list/detail/member reads enforce assigned-branch scope; directory hierarchy requires tenant administration. Existing own-branch write checks remain enforced. Remark reads and writes enforce branch ownership and edit capabilities; creation also verifies the branch belongs to the tenant. Dashboard perspective names cannot grant settings permissions.
 
 ### Pod Assignment System vs. Unassigned Requisitions
 - **Auto Mapping (Pod System enabled):** New job postings are assigned to recruiter pods automatically using round-robin logic.
