@@ -105,6 +105,8 @@ services:
       context: ./ats_backend
       dockerfile: Dockerfile.prod
     container_name: ats_backend_blue
+    volumes:
+      - ./ats_backend/public/image/logos:/app/public/image/logos
     restart: always
     expose:
       - "5000"
@@ -202,6 +204,8 @@ services:
       context: ./ats_backend
       dockerfile: Dockerfile.prod
     container_name: ats_backend_green
+    volumes:
+      - ./ats_backend/public/image/logos:/app/public/image/logos
     restart: always
     expose:
       - "5000"
