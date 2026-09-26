@@ -20,7 +20,11 @@ enfyjobs.com {
 # ─── 3. Keycloak Identity Provider ──────────────────────────────────
 auth.enfyjobs.com {
     encode gzip zstd
-    reverse_proxy keycloak:8080
+    reverse_proxy keycloak:8080 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+        header_up X-Real-IP {remote_host}
+    }
 }
 
 # ─── 4. Database Web Console (pgAdmin 4) ────────────────────────────

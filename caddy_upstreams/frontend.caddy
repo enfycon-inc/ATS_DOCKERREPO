@@ -3,4 +3,8 @@ reverse_proxy frontend_blue:3000 frontend_green:3000 {
     lb_try_duration 4s
     lb_try_interval 200ms
     fail_duration 5s
+
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Host {host}
+    header_up X-Real-IP {remote_host}
 }
