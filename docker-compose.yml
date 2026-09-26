@@ -1,24 +1,5 @@
 services:
-  # ─── 1. PostgreSQL — Single DB, 3 schemas (ats, mass_mail, keycloak) ──
-  postgres:
-    image: postgres:16-alpine
-    container_name: ats_postgres
-    restart: always
-    environment:
-      POSTGRES_DB: ats_db
-      POSTGRES_USER: ats_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-AtsDevPass2024}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-schemas.sql:/docker-entrypoint-initdb.d/01-init-schemas.sql:ro
-      - ./scripts/production_seed_data.sql:/docker-entrypoint-initdb.d/02-seed-data.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ats_user -d ats_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+
 
   # ─── 2. Redis Message Broker & Queue ──────────────────────────────────
   redis:
@@ -37,15 +18,13 @@ services:
     env_file:
       - ./resume-parser-main/.env
     environment:
-      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db
+      - DATABASE_URL=postgresql://ats_user:AtsDevPass2024@13.55.100.200:5432/ats_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./resume-parser-main:/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
     restart: always
@@ -58,14 +37,12 @@ services:
     env_file:
       - ./resume-parser-main/.env
     environment:
-      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db
+      - DATABASE_URL=postgresql://ats_user:AtsDevPass2024@13.55.100.200:5432/ats_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./resume-parser-main:/app
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
       api:
@@ -87,38 +64,13 @@ services:
       - ./ats_backend:/app
       - /app/node_modules
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_started
       api:
         condition: service_started
     restart: always
 
-  # ─── 7. Keycloak — Connected to Docker PostgreSQL (keycloak schema) ───
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: ats_keycloak_dev
-    command: start-dev
-    environment:
-      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
-      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
-      - KC_HTTP_ENABLED=true
-      - KC_HOSTNAME_STRICT=false
-      # ── PostgreSQL connection (keycloak schema) ──
-      - KC_DB=postgres
-      - KC_DB_URL=jdbc:postgresql://postgres:5432/ats_db
-      - KC_DB_USERNAME=ats_user
-      - KC_DB_PASSWORD=${POSTGRES_PASSWORD:-AtsDevPass2024}
-      - KC_DB_SCHEMA=keycloak
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./keycloak/imports:/opt/keycloak/data/import
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: always
-
 volumes:
   postgres_data:
+
+

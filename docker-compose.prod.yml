@@ -79,6 +79,7 @@ services:
       - INTERNAL_API_URL=http://backend_blue:5000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
       - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
+      - KEYCLOAK_ISSUER=https://auth.enfyjobs.com/realms/enfycon-ats
       - KEYCLOAK_REFRESH_TOKEN_TTL_SECONDS=86400
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
@@ -123,7 +124,8 @@ services:
       - PYTHON_PARSER_URL=http://api:8000
       - BASE_DOMAIN=enfyjobs.com
       - FRONTEND_URL=https://enfyjobs.com
-      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/enfycon-ats
+      - KEYCLOAK_ISSUER=https://auth.enfyjobs.com/realms/enfycon-ats
+      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
       - KEYCLOAK_CLIENT_ID=enfycon-ats
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn}
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
@@ -178,6 +180,7 @@ services:
       - INTERNAL_API_URL=http://backend_green:5000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
       - NEXT_PUBLIC_MAIN_DOMAIN_URL=https://enfyjobs.com
+      - KEYCLOAK_ISSUER=https://auth.enfyjobs.com/realms/enfycon-ats
       - KEYCLOAK_REFRESH_TOKEN_TTL_SECONDS=86400
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
@@ -222,7 +225,8 @@ services:
       - PYTHON_PARSER_URL=http://api:8000
       - BASE_DOMAIN=enfyjobs.com
       - FRONTEND_URL=https://enfyjobs.com
-      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/enfycon-ats
+      - KEYCLOAK_ISSUER=https://auth.enfyjobs.com/realms/enfycon-ats
+      - KEYCLOAK_INTERNAL_URL=http://keycloak:8080
       - KEYCLOAK_CLIENT_ID=enfycon-ats
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-mL9aWPt1POtRCp2dDqCt9tG4fakwm7rn}
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
