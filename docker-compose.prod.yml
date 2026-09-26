@@ -76,8 +76,6 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
-      - AUTH_URL=https://enfyjobs.com
-      - NEXTAUTH_URL=https://enfyjobs.com
       - NEXT_PUBLIC_SITE_URL=https://enfyjobs.com
       - INTERNAL_API_URL=http://backend_blue:5000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
@@ -182,8 +180,6 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - AUTH_TRUST_HOST=true
-      - AUTH_URL=https://enfyjobs.com
-      - NEXTAUTH_URL=https://enfyjobs.com
       - NEXT_PUBLIC_SITE_URL=https://enfyjobs.com
       - INTERNAL_API_URL=http://backend_green:5000
       - NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
