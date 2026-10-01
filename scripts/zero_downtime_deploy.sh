@@ -36,8 +36,14 @@ fi
 
 
 echo "?? Cleaning up old Docker build cache and unused images to free up VPS disk space..."
+echo "?? VPS Disk Space BEFORE Cleanup:"
+df -h /
+
 docker builder prune -af || true
 docker image prune -af || true
+
+echo "?? VPS Disk Space AFTER Cleanup:"
+df -h /
 
 # Pull core images
 docker compose -f docker-compose.prod.yml pull postgres redis keycloak pgadmin caddy
