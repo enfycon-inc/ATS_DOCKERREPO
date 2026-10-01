@@ -32,12 +32,29 @@ jobs:
           docker compose -f docker-compose.prod.yml config
 
   build:
-    name: Build & Push Docker Images
+    name: Build & Push ${{ matrix.tag }}
     needs: verify
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repo: enfycon-inc/ats_backend
+            path: ats_backend
+            dockerfile: Dockerfile.prod
+            tag: ats-backend
+          - repo: enfycon-inc/ats_frontend_main
+            path: ats_frontend_main
+            dockerfile: Dockerfile.prod
+            tag: ats-frontend
+          - repo: enfycon-inc/resume-parser
+            path: resume-parser-main
+            dockerfile: Dockerfile
+            tag: ats-parser
     steps:
       - name: Free Disk Space (Ubuntu)
+        if: matrix.tag == 'ats-parser'
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: true
@@ -48,25 +65,11 @@ jobs:
           docker-images: true
           swap-storage: false
 
-      - name: Checkout Frontend
+      - name: Checkout Microservice
         uses: actions/checkout@v4
         with:
-          repository: enfycon-inc/ats_frontend_main
-          path: ats_frontend_main
-          token: ${{ secrets.GH_PAT }}
-
-      - name: Checkout Backend
-        uses: actions/checkout@v4
-        with:
-          repository: enfycon-inc/ats_backend
-          path: ats_backend
-          token: ${{ secrets.GH_PAT }}
-
-      - name: Checkout Resume Parser
-        uses: actions/checkout@v4
-        with:
-          repository: enfycon-inc/resume-parser
-          path: resume-parser-main
+          repository: ${{ matrix.repo }}
+          path: ${{ matrix.path }}
           token: ${{ secrets.GH_PAT }}
 
       - name: Set up Docker Buildx
@@ -79,35 +82,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Backend
+      - name: Build and Push Image
         uses: docker/build-push-action@v5
         with:
-          context: ./ats_backend
-          file: ./ats_backend/Dockerfile.prod
+          context: ./${{ matrix.path }}
+          file: ./${{ matrix.path }}/${{ matrix.dockerfile }}
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ats-backend:latest
-          cache-from: type=gha,scope=ats-backend
-          cache-to: type=gha,mode=max,scope=ats-backend
-
-      - name: Build and Push Frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./ats_frontend_main
-          file: ./ats_frontend_main/Dockerfile.prod
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ats-frontend:latest
-          cache-from: type=gha,scope=ats-frontend
-          cache-to: type=gha,mode=max,scope=ats-frontend
-
-      - name: Build and Push Parser
-        uses: docker/build-push-action@v5
-        with:
-          context: ./resume-parser-main
-          file: ./resume-parser-main/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ats-parser:latest
-          cache-from: type=gha,scope=ats-parser
-          cache-to: type=gha,mode=max,scope=ats-parser
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.tag }}:latest
+          cache-from: type=gha,scope=${{ matrix.tag }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.tag }}
 
   deploy:
     name: Deploy to Production AWS VPS
