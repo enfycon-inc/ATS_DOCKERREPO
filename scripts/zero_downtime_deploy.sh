@@ -34,6 +34,11 @@ if [ "$KC_STATUS" = "restarting" ] || [ "$KC_STATUS" = "exited" ]; then
   docker rm -f ats_keycloak 2>/dev/null || true
 fi
 
+
+echo "?? Cleaning up old Docker build cache and unused images to free up VPS disk space..."
+docker builder prune -af || true
+docker image prune -af || true
+
 # Pull core images
 docker compose -f docker-compose.prod.yml pull postgres redis keycloak pgadmin caddy
 docker compose -f docker-compose.prod.yml up -d postgres redis api worker keycloak pgadmin caddy
