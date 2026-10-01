@@ -62,9 +62,7 @@ services:
 
   # ─── 2. Blue Stack: Next.js Frontend Application ──────────────────
   frontend_blue:
-    build:
-      context: ./ats_frontend_main
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/enfycon-inc/ats-frontend:latest
     container_name: ats_frontend_blue
     restart: always
     expose:
@@ -105,9 +103,7 @@ services:
 
   # ─── 3. Blue Stack: NestJS Core API Backend Server ────────────────
   backend_blue:
-    build:
-      context: ./ats_backend
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/enfycon-inc/ats-backend:latest
     container_name: ats_backend_blue
     volumes:
       - ./ats_backend/public/image/logos:/app/public/image/logos
@@ -166,9 +162,7 @@ services:
 
   # ─── 4. Green Stack: Next.js Frontend Application ─────────────────
   frontend_green:
-    build:
-      context: ./ats_frontend_main
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/enfycon-inc/ats-frontend:latest
     container_name: ats_frontend_green
     restart: always
     expose:
@@ -209,9 +203,7 @@ services:
 
   # ─── 5. Green Stack: NestJS Core API Backend Server ───────────────
   backend_green:
-    build:
-      context: ./ats_backend
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/enfycon-inc/ats-backend:latest
     container_name: ats_backend_green
     volumes:
       - ./ats_backend/public/image/logos:/app/public/image/logos
@@ -270,9 +262,7 @@ services:
 
   # ─── 6. FastAPI Resume Parser Microservice (Shared) ───────────────
   api:
-    build:
-      context: ./resume-parser-main
-      dockerfile: Dockerfile
+    image: ghcr.io/enfycon-inc/ats-parser:latest
     container_name: ats_parser_api
     restart: always
     expose:
@@ -305,9 +295,7 @@ services:
 
   # ─── 7. Celery Background Worker (Shared) ─────────────────────────
   worker:
-    build:
-      context: ./resume-parser-main
-      dockerfile: Dockerfile
+    image: ghcr.io/enfycon-inc/ats-parser:latest
     container_name: ats_parser_worker
     restart: always
     env_file:
