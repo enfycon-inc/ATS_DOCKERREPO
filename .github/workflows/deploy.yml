@@ -35,7 +35,7 @@ jobs:
     name: Build & Push ${{ matrix.tag }}
     needs: verify
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'repository_dispatch' || github.event.client_payload.repo == matrix.repo)
     strategy:
       fail-fast: false
       matrix:
