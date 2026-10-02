@@ -35,7 +35,7 @@ jobs:
     name: Build & Push ${{ matrix.tag }}
     needs: verify
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && (github.event_name != 'repository_dispatch' || github.event.client_payload.repo == matrix.repo)
+    if: github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
       matrix:
@@ -53,8 +53,15 @@ jobs:
             dockerfile: Dockerfile
             tag: ats-parser
     steps:
+      - name: Check if matrix job should run
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ] && [ "${{ github.event.client_payload.repo }}" != "${{ matrix.repo }}" ]; then
+            echo "skip=true" >> $GITHUB_ENV
+          fi
+
       - name: Free Disk Space (Ubuntu)
-        if: matrix.tag == 'ats-parser'
+        if: matrix.tag == 'ats-parser' && env.skip != 'true'
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: true
@@ -66,6 +73,7 @@ jobs:
           swap-storage: false
 
       - name: Checkout Microservice
+        if: env.skip != 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ matrix.repo }}
@@ -73,9 +81,11 @@ jobs:
           token: ${{ secrets.GH_PAT }}
 
       - name: Set up Docker Buildx
+        if: env.skip != 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
+        if: env.skip != 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -83,6 +93,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Image
+        if: env.skip != 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.path }}
