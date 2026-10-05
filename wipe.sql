@@ -1,0 +1,1 @@
+DELETE FROM tenants WHERE id != 'd3b07384-d113-49c3-a555-9ee75c13ca33'; UPDATE tenants SET name = 'default', domain = 'admin' WHERE id = 'd3b07384-d113-49c3-a555-9ee75c13ca33'; UPDATE tenant_domains SET domain_name = 'admin' WHERE tenant_id = 'd3b07384-d113-49c3-a555-9ee75c13ca33' AND is_primary = true;
