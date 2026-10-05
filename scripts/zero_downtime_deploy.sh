@@ -97,12 +97,12 @@ RETRY_INTERVAL=2
 
 for ((i=1; i<=MAX_RETRIES; i++)); do
   if [ $BACKEND_HEALTHY -eq 0 ]; then
-    if docker exec "ats_backend_${TARGET_COLOR}" node -e "require('http').get('http://localhost:5000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" >/dev/null 2>&1; then
+    if docker exec "ats_backend_${TARGET_COLOR}" node -e "require('http').get('http://127.0.0.1:5000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" >/dev/null 2>&1; then
       BACKEND_HEALTHY=1
     fi
   fi
   if [ $FRONTEND_HEALTHY -eq 0 ]; then
-    if docker exec "ats_frontend_${TARGET_COLOR}" node -e "require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" >/dev/null 2>&1; then
+    if docker exec "ats_frontend_${TARGET_COLOR}" node -e "require('http').get('http://127.0.0.1:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" >/dev/null 2>&1; then
       FRONTEND_HEALTHY=1
     fi
   fi
