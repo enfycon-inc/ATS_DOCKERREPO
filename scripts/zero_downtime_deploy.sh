@@ -115,6 +115,12 @@ done
 
 if [ $BACKEND_HEALTHY -eq 0 ] || [ $FRONTEND_HEALTHY -eq 0 ]; then
   echo "? Health check FAILED for Target [${TARGET_COLOR^^}]!"
+  
+  echo "========== BACKEND LOGS =========="
+  docker logs "ats_backend_${TARGET_COLOR}" --tail 100
+  echo "========== FRONTEND LOGS =========="
+  docker logs "ats_frontend_${TARGET_COLOR}" --tail 100
+  
   docker compose -f docker-compose.prod.yml stop "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}" || true
   exit 1
 fi
