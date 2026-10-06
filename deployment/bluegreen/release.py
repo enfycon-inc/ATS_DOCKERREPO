@@ -178,6 +178,13 @@ class Controller:
         args += ['--log-driver', logging.get('Type') or 'json-file']
         for key, value in logging.get('Config', {}).items():
             args += ['--log-opt', key + '=' + value]
+        if service == 'backend' and parser:
+            # Existing ATS binaries also call the legacy hostname "api" directly.
+            # Pin that name to this release's parser instead of the shared alias.
+            parser_ip = self.inspect(parser)['NetworkSettings']['Networks'][self.config['network']]['IPAddress']
+            if not parser_ip:
+                raise RuntimeError('Selected parser has no private IP')
+            args += ['--add-host', 'api:' + parser_ip]
         mounts = copy.deepcopy(template['Mounts'])
         for mount in mounts:
             source = mount.get('Name') if mount['Type'] == 'volume' else mount['Source']
@@ -308,6 +315,9 @@ await request('/me',null,login.accessToken);const renewed=await request('/refres
 if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/profile/refresh');
 })().catch(()=>{console.error('Candidate authentication checks failed');process.exit(1)});'''
         self.docker('exec', record['containers']['backend'], 'node', '-e', code, timeout=90)
+        parser_ip = self.inspect(record['containers']['parser'])['NetworkSettings']['Networks'][self.config['network']]['IPAddress']
+        check = "require('dns').lookup('api',(e,a)=>{if(e||a!==process.argv[1])process.exit(1);else fetch('http://api:8000/openapi.json').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))})"
+        self.docker('exec', record['containers']['backend'], 'node', '-e', check, parser_ip, timeout=30)
 
     def recover(self):
         pending = self.state.get('pending')
@@ -506,6 +516,9 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                 if obj['State']['Status'] != 'running':
                     missing.append(service)
             if missing:
+                if 'parser' in missing:
+                    # Recreated parser IPs require fresh release-specific clients.
+                    missing = list(dict.fromkeys([*missing, *PAIR]))
                 self.admission(sum(self.config['templates'][s]['HostConfig']['Memory'] for s in missing))
                 for service in ('parser', 'backend', 'frontend'):
                     if service not in missing:
