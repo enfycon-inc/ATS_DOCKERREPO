@@ -22,6 +22,7 @@ def command(*args, data=None, timeout=240):
 def main(service, image):
     prefix = 'ats-ci-' + secrets.token_hex(4)
     names = []
+    secrets_to_mask = []
     network = prefix
     command('docker', 'network', 'create', '--internal', network)
     with tempfile.TemporaryDirectory(prefix='ats-stage-') as directory:
@@ -32,6 +33,8 @@ def main(service, image):
             args = ['docker', 'run', '-d', '--name', name, '--network', network]
             for key, value in (env or {}).items():
                 args += ['-e', key + '=' + value]
+                if any(word in key for word in ('PASSWORD','SECRET')):
+                    secrets_to_mask.append(value)
             for source, dest in (mounts or []):
                 args += ['--mount', 'type=bind,src=' + str(Path(source).resolve()) + ',dst=' + dest + ',readonly']
             command(*(args + [ref] + (extra or [])))
@@ -46,7 +49,8 @@ def main(service, image):
                     return
                 except (RuntimeError, subprocess.TimeoutExpired):
                     time.sleep(3)
-            raise RuntimeError('Isolated staging readiness failed: ' + name)
+            logs = command('docker','logs','--tail','70',name)
+            raise RuntimeError('Isolated staging readiness failed: ' + name + '\n' + logs)
         try:
             if service == 'parser':
                 password = secrets.token_hex(24)
@@ -106,6 +110,14 @@ def main(service, image):
             else:
                 raise ValueError('Unknown service')
             print('STAGING_VERIFIED ' + service)
+        except Exception:
+            for name in names:
+                result = subprocess.run(['docker','logs','--tail','70',name],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+                logs = result.stdout
+                for secret in secrets_to_mask:
+                    logs = logs.replace(secret,'[redacted]')
+                print('STAGING_DIAGNOSTIC ' + name + '\n' + logs, flush=True)
+            raise
         finally:
             for name in reversed(names):
                 subprocess.run(['docker','rm','-f','-v',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

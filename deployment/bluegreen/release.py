@@ -229,6 +229,11 @@ class Controller:
                                     "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json',timeout=4).read()", timeout=10)
                     except RuntimeError:
                         ready = False
+                if service == 'worker' and ready and record['containers'][service].startswith('ats-release-'):
+                    # "running" alone includes the model-loading phase. Celery
+                    # emits this only after its broker connection and consumer start.
+                    logs = self.docker('logs', '--tail', '1000', record['containers'][service])
+                    ready = bool(re.search(r'celery@[^\s]+ ready\.', logs))
             if ready:
                 stable = stable or time.monotonic()
                 if time.monotonic() - stable >= 10:
@@ -582,6 +587,8 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
     def cleanup(self):
         retained = retained_ids(self.state)
         protected = keep_images(self.state)
+        obsolete_owned = {image['id'] for key, record in self.state['releases'].items()
+                          if key not in retained for image in record['images'].values()} - protected
         active_names = {name for key in (self.state['current'], self.state.get('previous')) if key
                         for name in self.state['releases'][key]['containers'].values()}
         try:
@@ -621,6 +628,9 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                 owned = re.fullmatch(r'ats-(frontend|backend|parser)', image['Repository']) or re.fullmatch(
                     r'ghcr.io/' + re.escape(self.config['registry_owner']) + r'/ats-(frontend|backend|parser)', image['Repository'])
                 reference = image['Repository'] + ':' + image['Tag']
+                if image['Tag'] == '<none>' and image['ID'] not in protected and image['ID'] not in used and (owned or image['ID'] in obsolete_owned):
+                    self.docker('image', 'rm', image['ID'])
+                    continue
                 if owned and image['Tag'] != '<none>' and reference not in canonical_tags:
                     if image['ID'] in protected or image['ID'] not in used:
                         self.docker('image', 'rm', reference)

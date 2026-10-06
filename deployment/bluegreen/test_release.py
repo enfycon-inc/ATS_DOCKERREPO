@@ -53,6 +53,8 @@ class Fake(release.Controller):
             return '\n'.join(names)
         if args[0] == 'image':
             return ''
+        if args[0] == 'logs':
+            return 'celery@test ready.'
         if args[0] == 'start':
             self.objects[args[1]]['State']['Status'] = 'running'
         if args[0] in ('stop','kill'):
