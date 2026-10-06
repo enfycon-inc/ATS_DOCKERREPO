@@ -41,6 +41,8 @@ if operation == 'deploy':
 elif operation not in ('bootstrap','rollback','status','cleanup'):
     raise ValueError('Unknown production operation')
 controller = base64.b64encode(Path('deployment/bluegreen/release.py').read_bytes()).decode()
+if os.environ.get('GITHUB_ACTIONS') == 'true':
+    print('::add-mask::' + controller)
 with open(os.environ['GITHUB_ENV'],'a') as stream:
     stream.write('DEPLOY_IMAGES='+json.dumps(images,separators=(',',':'))+'\n')
     stream.write('CONTROLLER_B64='+controller+'\n')

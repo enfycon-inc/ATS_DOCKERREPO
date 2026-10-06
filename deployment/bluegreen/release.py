@@ -306,10 +306,7 @@ class Controller:
                 if response.status != 200:
                     raise RuntimeError('Public readiness failed')
         # Confirm Caddy loaded these upstreams, not merely an older healthy release.
-        loaded = self.docker('exec', self.config['caddy'], 'wget', '-qO-', 'http://127.0.0.1:2019/config/')
-        for service, port in [('frontend', 3000), ('backend', 5000)]:
-            if record['containers'][service] + ':' + str(port) not in loaded:
-                raise RuntimeError('Caddy upstream mismatch: ' + service)
+        self.verify_routes(record)
 
     def login_checks(self, record):
         code = '''(async()=>{const base='http://127.0.0.1:5000/api/auth';
@@ -390,6 +387,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                for key in self.state['successful'] if key.startswith('gha-')):
             raise ValueError('Stale workflow run; active release unchanged')
         old = self.state['releases'][self.state['current']]
+        self.assert_routes_unchanged(old)
         record = {'id': release_id, 'time': time.time(), 'status': 'preparing',
                   'images': copy.deepcopy(old['images']), 'containers': copy.deepcopy(old['containers']),
                   'assets': [], 'caddy': old['caddy'], 'adapters': copy.deepcopy(old['adapters'])}
@@ -493,6 +491,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
         record = self.state['releases'][target]
         old_id = self.state['current']
         old = self.state['releases'][old_id]
+        self.assert_routes_unchanged(old)
         old_hash = old.get('schema_hash') or hashlib.sha256(self.schema(old['images']['backend']).encode()).hexdigest()
         target_hash = record.get('schema_hash') or hashlib.sha256(self.schema(record['images']['backend']).encode()).hexdigest()
         if old_hash != target_hash:
@@ -583,6 +582,30 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             with urllib.request.urlopen(url, timeout=15) as response:
                 if response.status != 200:
                     raise RuntimeError('Rollback public checks failed')
+        self.verify_routes(record)
+
+    def assert_routes_unchanged(self, record):
+        if canonical_schema((self.root / 'Caddyfile').read_text()) != canonical_schema(record['caddy']):
+            raise RuntimeError('Caddy routes changed outside the release controller; review before deployment')
+
+    def verify_routes(self, record):
+        loaded = json.loads(self.docker('exec', self.config['caddy'], 'wget', '-qO-', 'http://127.0.0.1:2019/config/'))
+        dials = set()
+        def walk(value):
+            if isinstance(value, dict):
+                if 'dial' in value:
+                    dials.add(value['dial'])
+                for child in value.values():
+                    walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+        walk(loaded)
+        initial = record['caddy'] == self.config['caddy_base']
+        for service, port in [('frontend',3000),('backend',5000)]:
+            name = service if initial else record['containers'][service]
+            if name + ':' + str(port) not in dials:
+                raise RuntimeError('Loaded rollback upstream mismatch: ' + service)
 
     def cleanup(self):
         retained = retained_ids(self.state)

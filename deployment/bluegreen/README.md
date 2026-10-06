@@ -51,6 +51,9 @@ the active release rather than a retired Compose container. Application services
 are removed from the infrastructure Compose declaration after conversion, while
 PostgreSQL, Redis, Keycloak and Caddy continue running. Avoid the older local
 dashboard deployment path after conversion; use these GitHub operations.
+Adding another application's routes to Caddy requires reviewing the controller's
+base configuration too. External routing changes stop deployment for review
+instead of being overwritten by an older ATS routing snapshot.
 
 ## Prerequisites and limits
 

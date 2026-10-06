@@ -108,6 +108,9 @@ class Fake(release.Controller):
     def public_checks_fast(self, record):
         pass
 
+    def assert_routes_unchanged(self, record):
+        pass
+
 
 class Tests(unittest.TestCase):
     def setUp(self):
@@ -144,6 +147,15 @@ class Tests(unittest.TestCase):
         self.controller.docker=docker
         self.controller.cleanup()
         self.assertEqual(deleted,['failed-unused'])
+
+    def test_external_routes_are_not_overwritten(self):
+        path=self.controller.root/'Caddyfile'
+        path.write_text('old routing')
+        record=self.controller.state['releases']['initial']
+        release.Controller.assert_routes_unchanged(self.controller,record)
+        path.write_text('old routing\nnew-enfysync-site')
+        with self.assertRaisesRegex(RuntimeError,'review'):
+            release.Controller.assert_routes_unchanged(self.controller,record)
 
     def test_success_keeps_previous_ready(self):
         self.deploy(1)
