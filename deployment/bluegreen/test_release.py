@@ -55,6 +55,8 @@ class Fake(release.Controller):
             return ''
         if args[0] == 'logs':
             return 'celery@test ready.'
+        if args[0] == 'exec' and any('getJobCounts' in arg for arg in args):
+            self.objects[args[1]]['State']['Status'] = 'exited'
         if args[0] == 'start':
             self.objects[args[1]]['State']['Status'] = 'running'
         if args[0] in ('stop','kill'):
@@ -69,7 +71,7 @@ class Fake(release.Controller):
         name = 'ats-release-'+record['id']+'-'+service
         record['containers'][service] = name
         self.objects[name] = {'Id':name,'Name':'/'+name,'Image':image['id'],
-            'State':{'Status':'running','Health':{'Status':'healthy'}},'Config':{'Labels':{}}}
+            'State':{'Status':'running','Health':{'Status':'healthy'}},'Config':{'Labels':{'io.ats.graceful-shutdown':'true'}}}
         if self.mode == 'wrong-image' and service == 'backend':
             self.objects[name]['Image'] = 'wrong'
         self.save()
@@ -124,6 +126,24 @@ class Tests(unittest.TestCase):
     def test_crlf_only_is_not_schema_change(self):
         self.assertEqual(release.canonical_schema('model A {\r\n}\r\n'),release.canonical_schema('model A {\n}\n'))
         self.assertNotEqual(release.canonical_schema('id Int'),release.canonical_schema('id String'))
+
+    def test_unlabeled_legacy_image_is_supported(self):
+        self.controller.docker=lambda *args,**kw: json.dumps([{'Id':'legacy','RepoDigests':[],'Config':{'Labels':None}}])
+        self.assertIsNone(release.Controller.image(self.controller,'legacy')['revision'])
+
+    def test_cleanup_does_not_delete_foreign_or_running_images(self):
+        deleted=[]
+        real=self.controller.docker
+        rows=[{'Repository':'ghcr.io/enfycon-inc/ats-backend','Tag':'<none>','ID':'failed-unused'},
+              {'Repository':'ghcr.io/enfycon-inc/ats-backend','Tag':'<none>','ID':'old-backend'},
+              {'Repository':'enfysync-backend','Tag':'old','ID':'foreign-unused'}]
+        def docker(*args,**kw):
+            if args[:2]==('image','ls'):return '\n'.join(json.dumps(r) for r in rows)
+            if args[:2]==('image','rm'):deleted.append(args[2]);return ''
+            return real(*args,**kw)
+        self.controller.docker=docker
+        self.controller.cleanup()
+        self.assertEqual(deleted,['failed-unused'])
 
     def test_success_keeps_previous_ready(self):
         self.deploy(1)

@@ -676,7 +676,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                     if time.monotonic() >= deadline:
                         raise RuntimeError('Retired HTTP requests still draining; cleanup will retry')
                     time.sleep(3)
-        if service == 'backend' and 'ATS_SKIP_BOOTSTRAP=true' in obj['Config'].get('Env', []):
+        if service == 'backend' and obj['Config'].get('Labels', {}).get('io.ats.graceful-shutdown') == 'true':
             # New backend images forward TERM to Node and Nest closes Bull workers.
             # Never force-kill a mail/CV task to satisfy a cleanup deadline.
             self.docker('kill', '--signal', 'TERM', obj['Id'])
@@ -687,6 +687,16 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                 time.sleep(3)
         elif service == 'worker':
             self.drain_worker(obj['Id'])
+        elif service == 'backend':
+            # The initial legacy image runs Node under a shell and has no drain
+            # hooks. Refuse retirement while its shared queues contain work.
+            check = "(async()=>{const {Queue}=require('bullmq');const qs=['mass_mail','bulk_cv'].map(n=>new Queue(n,{connection:{host:process.env.REDIS_HOST,port:Number(process.env.REDIS_PORT||6379)}}));let busy=false;for(const q of qs){const c=await q.getJobCounts('active','wait','prioritized');busy=busy||Object.values(c).some(n=>n>0);await q.close()}if(busy)process.exit(1);const fs=require('fs');for(const pid of fs.readdirSync('/proc').filter(p=>/^\\d+$/.test(p)&&Number(p)!==process.pid)){try{const c=fs.readFileSync('/proc/'+pid+'/cmdline','utf8');if(c.includes('node')&&(c.includes('dist/main')||c.includes('dist/src/main')))process.kill(Number(pid),'SIGTERM')}catch(e){}}})().catch(()=>process.exit(1))"
+            self.docker('exec', obj['Id'], 'node', '-e', check, timeout=30)
+            deadline = time.monotonic() + 30
+            while self.inspect(obj['Id'])['State']['Status'] == 'running':
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Legacy backend has not exited; cleanup will retry')
+                time.sleep(1)
         else:
             self.docker('stop', '--time', '30', obj['Id'])
 
