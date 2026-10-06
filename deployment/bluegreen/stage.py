@@ -44,6 +44,10 @@ def main(service, image):
         def wait(name, args, timeout=240):
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
+                states = json.loads(command('docker','inspect',*names))
+                for state in states:
+                    if state['State']['Status'] in ('exited','dead'):
+                        raise RuntimeError('Staging service exited: ' + state['Name'])
                 try:
                     exec_(name, *args, timeout=10)
                     return
@@ -86,7 +90,7 @@ def main(service, image):
                     'KC_DB':'postgres','KC_DB_URL':'jdbc:postgresql://' + postgres + ':5432/ats_db',
                     'KC_DB_USERNAME':'ats_user','KC_DB_PASSWORD':password,'KC_DB_SCHEMA':'keycloak',
                     'KC_HTTP_ENABLED':'true','KC_HOSTNAME_STRICT':'false','JAVA_OPTS_APPEND':'-Xms128m -Xmx384m'},
-                    [(realm,'/opt/keycloak/data/import/realm.json')],['start-dev','--import-realm'])
+                    [(realm,'/opt/keycloak/data/import/realm.json')],['--verbose','start-dev','--import-realm'])
                 # JDK image has no curl; check Keycloak from the backend network.
                 tenant = str(uuid.uuid4())
                 env = {'PORT':'5000','DATABASE_URL':'postgresql://ats_user:'+password+'@'+postgres+':5432/ats_db?schema=ats&options=-csearch_path%3Dats,mass_mail,public',

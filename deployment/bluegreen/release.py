@@ -80,7 +80,7 @@ class Controller:
         obj = json.loads(self.docker('image', 'inspect', name))[0]
         return {'id': obj['Id'], 'ref': name,
                 'digest': next(iter(obj.get('RepoDigests', [])), None),
-                'revision': obj['Config'].get('Labels', {}).get('org.opencontainers.image.revision')}
+                'revision': (obj['Config'].get('Labels') or {}).get('org.opencontainers.image.revision')}
 
     def save(self):
         atomic(self.statefile, self.state)
