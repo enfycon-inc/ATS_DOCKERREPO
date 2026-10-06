@@ -1,181 +1,219 @@
-name: CI/CD Production Deployment to AWS VPS
-run-name: ${{ github.event.client_payload.commit || github.event.head_commit.message || 'Manual deployment' }}
-
+name: ATS CI/CD - blue green production
+run-name: ${{ github.event.client_payload.commit || github.event.head_commit.message || format('{0} {1}', inputs.operation, inputs.service) }}
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   repository_dispatch:
     types: [microservice-updated]
   workflow_dispatch:
     inputs:
-      check_only:
-        description: Test VPS connection without building or deploying
-        type: boolean
-        default: false
+      operation:
+        description: Production operation
+        type: choice
+        options: [deploy, rollback, bootstrap, status, cleanup]
+        default: deploy
       service:
-        description: Service to deploy
+        description: Service to build or retry
         type: choice
         options: [all, frontend, backend, parser]
         default: all
       existing_release:
-        description: Optional existing GHCR release tag (gha-RUN-ATTEMPT); skips rebuilding
+        description: Optional already-built gha-RUN-ATTEMPT tag (staging checks still run)
         type: string
         default: ''
-
+      rollback_target:
+        description: Retained release ID; blank selects previous release
+        type: string
+        default: ''
 concurrency:
   group: production-deployment
   cancel-in-progress: false
-
 permissions:
   contents: read
   packages: write
-
 jobs:
   verify:
-    name: Verify Current VPS
+    name: Test deployment and rollback controller
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Orchestrator Code
-        uses: actions/checkout@v4
-
-      - name: Test deployment failure and completion handling
-        run: python3 deployment/github/test-deploy.py
-
-      - name: Check SSH connection and current installation
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER || 'ubuntu' }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          script: |
-            set -e
-            cd /var/www/ats-prod
-            test -f compose.yml
-            test -f .env
-            test -f backup.sh
-            sudo -n docker info >/dev/null
-            sudo -n docker compose -f compose.yml config --quiet
-            echo 'Current VPS installation verified'
-
+      - uses: actions/checkout@v4
+      - run: python3 deployment/bluegreen/test_release.py
+      - run: python3 -m py_compile deployment/bluegreen/release.py deployment/bluegreen/stage.py
   build:
-    name: Build & Push ${{ matrix.tag }}
+    name: Build and stage ${{ matrix.tag }}
     needs: verify
+    if: github.ref == 'refs/heads/main' && (!inputs.operation || inputs.operation == 'deploy') && !inputs.existing_release
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && !inputs.check_only && !inputs.existing_release
     strategy:
       fail-fast: false
       matrix:
         include:
           - repo: enfycon-inc/ats_backend
             path: ats_backend
-            dockerfile: Dockerfile.prod
             tag: ats-backend
+            service: backend
           - repo: enfycon-inc/ats_frontend_main
             path: ats_frontend_main
-            dockerfile: Dockerfile.prod
             tag: ats-frontend
+            service: frontend
           - repo: enfycon-inc/resume-parser
             path: resume-parser-main
-            dockerfile: Dockerfile
             tag: ats-parser
+            service: parser
     steps:
-      - name: Check if matrix job should run
-        id: check
+      - name: Select changed service
         env:
           EVENT_NAME: ${{ github.event_name }}
           DISPATCH_REPO: ${{ github.event.client_payload.repo }}
           MATRIX_REPO: ${{ matrix.repo }}
-          MATRIX_TAG: ${{ matrix.tag }}
+          MATRIX_SERVICE: ${{ matrix.service }}
           SERVICE: ${{ inputs.service || 'all' }}
         run: |
-          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ "$DISPATCH_REPO" != "$MATRIX_REPO" ]; then
-            echo "skip=true" >> $GITHUB_ENV
-          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$SERVICE" != "all" ] && [ "ats-$SERVICE" != "$MATRIX_TAG" ]; then
-            echo "skip=true" >> $GITHUB_ENV
+          if [ "$EVENT_NAME" = repository_dispatch ] && [ "$DISPATCH_REPO" != "$MATRIX_REPO" ]; then
+            echo 'skip=true' >> "$GITHUB_ENV"
+          elif [ "$EVENT_NAME" = workflow_dispatch ] && [ "$SERVICE" != all ] && [ "$SERVICE" != "$MATRIX_SERVICE" ]; then
+            echo 'skip=true' >> "$GITHUB_ENV"
           fi
-
-      - name: Free Disk Space (Ubuntu)
-        if: matrix.tag == 'ats-parser' && env.skip != 'true'
-        uses: jlumbroso/free-disk-space@main
+      - uses: actions/checkout@v4
+        if: env.skip != 'true'
         with:
-          tool-cache: true
+          repository: ${{ matrix.repo }}
+          path: ${{ matrix.path }}
+          ref: ${{ github.event.client_payload.repo == matrix.repo && github.event.client_payload.ref || 'main' }}
+          token: ${{ secrets.GH_PAT }}
+      - uses: actions/checkout@v4
+        if: env.skip != 'true'
+        with:
+          path: orchestrator
+      - uses: actions/setup-node@v4
+        if: env.skip != 'true' && matrix.service != 'parser'
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+      - name: Backend unit and type checks
+        if: env.skip != 'true' && matrix.service == 'backend'
+        working-directory: ${{ matrix.path }}
+        run: |
+          npm ci
+          npx prisma generate
+          npm test -- --runInBand
+          npm run build
+      - name: Frontend lint and type checks
+        if: env.skip != 'true' && matrix.service == 'frontend'
+        working-directory: ${{ matrix.path }}
+        run: |
+          npm ci --legacy-peer-deps
+          npm run lint
+          npx tsc --noEmit --incremental false
+      - name: Parser syntax checks
+        if: env.skip != 'true' && matrix.service == 'parser'
+        working-directory: ${{ matrix.path }}
+        run: python3 -m compileall -q app main.py
+      - name: Record source revision
+        if: env.skip != 'true'
+        id: source
+        working-directory: ${{ matrix.path }}
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: jlumbroso/free-disk-space@main
+        if: env.skip != 'true' && matrix.service == 'parser'
+        with:
           android: true
           dotnet: true
           haskell: true
           large-packages: true
           docker-images: true
           swap-storage: false
-
-      - name: Checkout Microservice
+      - uses: docker/setup-buildx-action@v3
         if: env.skip != 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ matrix.repo }}
-          path: ${{ matrix.path }}
-          ref: ${{ github.event.client_payload.repo == matrix.repo && github.event.client_payload.ref || 'main' }}
-          token: ${{ secrets.GH_PAT }}
-
-      - name: Checkout Deployment Configuration
+      - uses: docker/login-action@v3
         if: env.skip != 'true'
-        uses: actions/checkout@v4
-        with:
-          path: orchestrator
-
-      - name: Record source revision
-        if: env.skip != 'true'
-        id: source
-        working-directory: ${{ matrix.path }}
-        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        if: env.skip != 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        if: env.skip != 'true'
-        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push Image
+      - name: Build immutable release image
         if: env.skip != 'true'
+        id: image
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.path }}
-          file: ${{ matrix.tag == 'ats-parser' && 'orchestrator/deployment/production/Dockerfile.parser' || format('./{0}/{1}', matrix.path, matrix.dockerfile) }}
+          file: ${{ matrix.service == 'parser' && 'orchestrator/deployment/production/Dockerfile.parser' || format('{0}/Dockerfile.prod', matrix.path) }}
+          platforms: linux/amd64
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.tag }}:gha-${{ github.run_id }}-${{ github.run_attempt }}
-          build-args: NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
           labels: org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
+          build-args: NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
           cache-from: type=gha,scope=${{ matrix.tag }}
           cache-to: type=gha,mode=max,scope=${{ matrix.tag }}
-
-  deploy:
-    name: Deploy to Current Production VPS
+      - name: Pull and test image in isolated staging
+        if: env.skip != 'true'
+        working-directory: orchestrator
+        env:
+          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/${{ matrix.tag }}@${{ steps.image.outputs.digest }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          docker pull "$IMAGE_REF"
+          python3 deployment/bluegreen/stage.py "$SERVICE" "$IMAGE_REF"
+      - name: Record tested image
+        if: env.skip != 'true'
+        env:
+          SERVICE: ${{ matrix.service }}
+          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/${{ matrix.tag }}@${{ steps.image.outputs.digest }}
+        run: python3 -c 'import json,os;open("image.json","w").write(json.dumps({os.environ["SERVICE"]:os.environ["IMAGE_REF"]}))'
+      - uses: actions/upload-artifact@v4
+        if: env.skip != 'true'
+        with:
+          name: tested-${{ matrix.service }}
+          path: image.json
+  release:
+    name: Verify and activate production release
     needs: [verify, build]
-    if: always() && !cancelled() && needs.verify.result == 'success' && !inputs.check_only && (needs.build.result == 'success' || (inputs.existing_release && needs.build.result == 'skipped'))
+    if: always() && !cancelled() && needs.verify.result == 'success' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && (inputs.existing_release || (inputs.operation && inputs.operation != 'deploy'))))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pull built images and restart current VPS application services
+      - uses: actions/download-artifact@v4
+        if: needs.build.result == 'success'
+        with:
+          pattern: tested-*
+          path: tested
+      - uses: docker/login-action@v3
+        if: ${{ !inputs.operation || inputs.operation == 'deploy' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare tested release and controller
+        env:
+          OPERATION: ${{ inputs.operation || 'deploy' }}
+          SERVICE: ${{ inputs.service || 'all' }}
+          EXISTING_RELEASE: ${{ inputs.existing_release }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_REPO: ${{ github.event.client_payload.repo }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
+          VPS_HOST_FINGERPRINT: ${{ vars.VPS_HOST_FINGERPRINT }}
+        run: python3 deployment/bluegreen/prepare.py
+      - name: Execute blue green deployment or rollback
         uses: appleboy/ssh-action@v1.2.0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_ACTOR: ${{ github.actor }}
           IMAGE_OWNER: ${{ github.repository_owner }}
-          RELEASE_TAG: ${{ inputs.existing_release || format('gha-{0}-{1}', github.run_id, github.run_attempt) }}
-          SERVICE: ${{ inputs.service || 'all' }}
-          DISPATCH_REPO: ${{ github.event.client_payload.repo }}
-          EVENT_NAME: ${{ github.event_name }}
+          OPERATION: ${{ inputs.operation || 'deploy' }}
+          RELEASE_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}
+          ROLLBACK_TARGET: ${{ inputs.rollback_target }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER || 'ubuntu' }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          fingerprint: ${{ vars.VPS_HOST_FINGERPRINT }}
           command_timeout: 30m
-          envs: GH_TOKEN,GH_ACTOR,IMAGE_OWNER,RELEASE_TAG,DISPATCH_REPO,EVENT_NAME,SERVICE
-          script_path: deployment/github/deploy-current-vps.sh
+          envs: GH_TOKEN,GH_ACTOR,IMAGE_OWNER,OPERATION,RELEASE_ID,ROLLBACK_TARGET,DEPLOY_IMAGES,CONTROLLER_B64
+          script_path: deployment/bluegreen/execute.sh
+      - name: Record outcome
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+        run: echo "Release result - $RESULT. VPS activation requires running-image and public-route verification." >> "$GITHUB_STEP_SUMMARY"
