@@ -717,17 +717,54 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
         elif service == 'worker':
             self.drain_worker(obj['Id'])
         elif service == 'backend':
-            # The initial legacy image runs Node under a shell and has no drain
-            # hooks. Refuse retirement while its shared queues contain work.
-            check = "(async()=>{const {Queue}=require('bullmq');const qs=['mass_mail','bulk_cv'].map(n=>new Queue(n,{connection:{host:process.env.REDIS_HOST,port:Number(process.env.REDIS_PORT||6379)}}));let busy=false;for(const q of qs){const c=await q.getJobCounts('active','wait','prioritized');busy=busy||Object.values(c).some(n=>n>0);await q.close()}if(busy)process.exit(1);const fs=require('fs');for(const pid of fs.readdirSync('/proc').filter(p=>/^\\d+$/.test(p)&&Number(p)!==process.pid)){try{const c=fs.readFileSync('/proc/'+pid+'/cmdline','utf8');if(c.includes('node')&&(c.includes('dist/main')||c.includes('dist/src/main')))process.kill(Number(pid),'SIGTERM')}catch(e){}}})().catch(()=>process.exit(1))"
-            self.docker('exec', obj['Id'], 'node', '-e', check, timeout=30)
-            deadline = time.monotonic() + 30
-            while self.inspect(obj['Id'])['State']['Status'] == 'running':
-                if time.monotonic() >= deadline:
-                    raise RuntimeError('Legacy backend has not exited; cleanup will retry')
-                time.sleep(1)
+            self.retire_legacy_backend(obj)
         else:
             self.docker('stop', '--time', '30', obj['Id'])
+
+    def queue_control(self, action, snapshot=None):
+        active = self.state['releases'][self.state['current']]['containers']['backend']
+        script = '''(async()=>{
+const {Queue}=require('bullmq');
+const qs=['mass_mail','bulk_cv'].map(name=>new Queue(name,{connection:{host:process.env.REDIS_HOST,port:Number(process.env.REDIS_PORT||6379)}}));
+try {
+ const action=process.argv[1], previous=JSON.parse(process.argv[2]); let result;
+ if(action==='snapshot')result=await Promise.all(qs.map(async q=>({name:q.name,paused:await q.isPaused()})));
+ else if(action==='pause') {for(const q of qs)if(!previous.find(p=>p.name===q.name).paused)await q.pause();}
+ else if(action==='active')result=(await Promise.all(qs.map(q=>q.getActiveCount()))).reduce((a,b)=>a+b,0);
+ else if(action==='restore') {for(const q of qs)if(!previous.find(p=>p.name===q.name).paused)await q.resume();}
+ else throw Error('Unknown queue action');
+ console.log(JSON.stringify(result??null));
+}finally{await Promise.all(qs.map(q=>q.close()))}
+})().catch(()=>{console.error('Queue retirement operation failed');process.exit(1)});'''
+        return json.loads(self.docker('exec', active, 'node', '-e', script, action,
+                                      json.dumps(snapshot or []), timeout=30).strip())
+
+    def restore_retirement_queues(self):
+        marker = self.home / 'queue-retirement.json'
+        if marker.exists():
+            self.queue_control('restore', json.loads(marker.read_text()))
+            marker.unlink()
+
+    def retire_legacy_backend(self, obj):
+        # Container PID 1 ignores default TERM when the old image has no Node
+        # shutdown handler. Pause only job dispatch, let every active job finish,
+        # and stop the idle process. Queued jobs remain in Redis throughout.
+        self.restore_retirement_queues()
+        previous = self.queue_control('snapshot')
+        marker = self.home / 'queue-retirement.json'
+        atomic(marker, previous)
+        try:
+            self.queue_control('pause', previous)
+            deadline = time.monotonic() + 300
+            while self.queue_control('active'):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Active backend jobs still draining; cleanup will retry')
+                time.sleep(3)
+            # HTTP connections drained above; global queue pause prevents an idle
+            # legacy worker from claiming a job between verification and exit.
+            self.docker('kill', '--signal', 'KILL', obj['Id'])
+        finally:
+            self.restore_retirement_queues()
 
     def install_operations(self):
         # Retain the old files for recovery, then remove application declarations
@@ -974,6 +1011,7 @@ def main():
                               'cleanup_error': controller.state.get('cleanup_error')}))
             return
         controller.recover_router_migration()
+        controller.restore_retirement_queues()
         controller.initialize()
         controller.recover()
         if action in ('deploy', 'bootstrap'):

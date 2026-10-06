@@ -15,7 +15,7 @@ fi
 unset GH_TOKEN CONTROLLER_B64
 # Controller reports success only after verifying the live image IDs and routes.
 # Preserve its stable entry point for nightly backups and reboot reconciliation.
-cp "bluegreen/controller-${RELEASE_ID}.py" bluegreen/release.py
-chmod 700 bluegreen/release.py
+install -m 700 "bluegreen/controller-${RELEASE_ID}.py" bluegreen/release.py.next
+mv -f bluegreen/release.py.next bluegreen/release.py
 python3 bluegreen/release.py /var/www/ats-prod "$OPERATION" </dev/null
 ATS_RELEASE

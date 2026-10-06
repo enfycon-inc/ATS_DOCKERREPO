@@ -111,6 +111,10 @@ class Fake(release.Controller):
     def assert_routes_unchanged(self, record):
         pass
 
+    def queue_control(self, action, snapshot=None):
+        if action=='snapshot':return [{'name':'mass_mail','paused':True},{'name':'bulk_cv','paused':False}]
+        if action=='active':return 1 if self.mode=='active-jobs' else 0
+
 
 class Tests(unittest.TestCase):
     def setUp(self):
@@ -203,6 +207,42 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'address mismatch'):
             c.switch(target)
         self.assertFalse(any(cmd.startswith('set server') for cmd in runtime['commands']))
+
+    def test_interrupted_router_setup_restores_original_journal(self):
+        c=self.controller
+        marker=c.home/'router-migration.json'
+        release.atomic(marker, {'state':copy.deepcopy(c.state),'config':copy.deepcopy(c.config)})
+        c.routes='partially installed router'
+        c.config['router']={'id':'candidate-router'}
+        c.state['releases']['initial']['caddy']='partially installed router'
+        c.recover_router_migration()
+        self.assertEqual(c.routes,'old routing')
+        self.assertNotIn('router',c.config)
+        self.assertFalse(marker.exists())
+
+    def test_active_jobs_prevent_legacy_termination_and_resume_queues(self):
+        c=self.controller;c.mode='active-jobs'
+        with self.assertRaisesRegex(RuntimeError,'jobs still draining'):
+            c.retire_legacy_backend(c.objects['initial-backend'])
+        self.assertEqual(c.objects['initial-backend']['State']['Status'],'running')
+        self.assertFalse((c.home/'queue-retirement.json').exists())
+
+    def test_legacy_exit_preserves_previous_queue_pause_state(self):
+        c=self.controller;calls=[];original=c.queue_control
+        def control(action,snapshot=None):
+            calls.append((action,snapshot));return original(action,snapshot)
+        c.queue_control=control
+        c.retire_legacy_backend(c.objects['initial-backend'])
+        self.assertEqual(c.objects['initial-backend']['State']['Status'],'exited')
+        self.assertEqual(calls[-1],('restore',[{'name':'mass_mail','paused':True},{'name':'bulk_cv','paused':False}]))
+
+    def test_interrupted_retirement_restores_job_dispatch(self):
+        c=self.controller;snapshot=[{'name':'mass_mail','paused':False},{'name':'bulk_cv','paused':True}]
+        release.atomic(c.home/'queue-retirement.json',snapshot)
+        calls=[];c.queue_control=lambda action,previous=None:calls.append((action,previous))
+        c.restore_retirement_queues()
+        self.assertEqual(calls,[('restore',snapshot)])
+        self.assertFalse((c.home/'queue-retirement.json').exists())
 
     def test_success_keeps_previous_ready(self):
         self.deploy(1)

@@ -48,11 +48,16 @@ Prevent duplicate scheduled jobs and unsafe startup side effects when multiple
 backends run together. Preserve old Next.js assets and test browser deployment
 version skew rather than relying on the homepage health check alone.
 
-Validate and gracefully reload one Caddy configuration that switches root, tenant,
-API and certificate-domain authorization routes together. Do not restart Caddy,
-Keycloak or the database. Keep the previous upstreams available for requests that
-are still finishing. Test persistent routing across Caddy/VPS restarts and account
-for long-lived connections explicitly.
+Implementation refinement: availability checks found brief connection resets
+while reloading Caddy. Keep Caddy's root, tenant, API and certificate-authorization
+routes fixed through an internal HAProxy. Switch one runtime map entry after both
+release targets are healthy, without reloading either proxy. Keep previous
+upstreams available for in-flight requests and upgraded connections. Persist
+validated server addresses and the selected map for restarts; reconcile an
+interrupted operation to the last successful journal entry. The proxy reserves
+64 MiB within the existing ATS allocation and exposes only a root-only Unix
+administration socket, with no public administration port. The one-time proxy
+conversion requires a Caddy reload and is distinct from routine releases.
 
 The initial conversion keeps today's live containers serving traffic while the
 first candidate starts and is checked. It must not require compose down or remove
@@ -62,7 +67,7 @@ the existing volumes.
 
 After switching, verify public routes and the expected running image digests, then
 observe a defined health window before recording the release as successful.
-If checks fail, reload the previous routing configuration, verify recovery and
+If checks fail, select the previous runtime routing map, verify recovery and
 record the failed candidate. Keep a durable journal so interrupted SSH/GitHub
 runs can reconcile the actual Caddy configuration and container versions.
 

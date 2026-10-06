@@ -15,8 +15,8 @@ Open **ATS CI/CD - blue green production**, choose **Run workflow**, branch `mai
   one of the five retained release IDs shown by `status`.
 * `status`: display current, previous, retained IDs and any cleanup warning.
 * `cleanup`: retry reference-aware cleanup. Never removes database/upload volumes.
-* `bootstrap`: convert the existing verified production images to release pairs
-  without rebuilding or downloading. Intended for the initial conversion only.
+* `bootstrap`: convert existing verified application images to release pairs
+  without rebuilding them. Downloads the internal proxy during initial setup.
 * `existing_release`: optional explicit retry of a previously built `gha-RUN-ATTEMPT`
   image tag. It is tested again on the runner before production pulls it.
 
@@ -29,14 +29,21 @@ Open **ATS CI/CD - blue green production**, choose **Run workflow**, branch `mai
    frontend/backend pair; each frontend addresses its own backend.
 4. Check running image identities, readiness, password login and refresh. Preserve
    retained Next.js static assets for browsers opened before the release.
-5. Back up the database/uploads. Validate and gracefully reload Caddy, including
-   dynamic tenant routing and TLS authorization. Verify public routes and observe
-   candidate health before recording success.
+5. Back up the database/uploads. Wait for both targets in the internal HAProxy to
+   become healthy, then change one runtime map entry for frontend/API/TLS-domain
+   authorization together. Caddy continues running with unchanged routes. Verify
+   public routes and observe candidate health before recording success.
 6. Keep the active and immediate previous HTTP pair warm. Retain five successful
    complete release manifests/images; drain/remove older containers and prune only
    owned, unreferenced application images/assets. Shared image layers are deduplicated.
 
 The immediate previous warm HTTP release switches without a build/pull/restart.
+Existing requests and upgraded connections keep their original upstream; new
+requests use the selected release. HAProxy uses 64 MiB inside the existing ATS
+allocation and exposes no host ports. Its administration socket is root-only.
+The one-time conversion to the stable proxy requires a Caddy reload; routine
+deployments and rollbacks do not reload either proxy. Persistent map/server files
+and the release journal allow recovery after a process/VPS restart.
 Older retained versions need startup and health checks. Parser changes need memory
 for another parser; Celery worker changes wait for active tasks to finish. Queued
 tasks remain in Redis. Worker handoffs and older-version recovery are not instant.
