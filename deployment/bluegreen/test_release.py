@@ -157,14 +157,52 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'review'):
             release.Controller.assert_routes_unchanged(self.controller,record)
 
-    def test_handoff_delay_is_added_once_to_all_snapshots(self):
-        self.controller.config['caddy_base']='{\n}\nreverse_proxy frontend:3000'
-        self.controller.state['releases']['initial']['caddy']=self.controller.config['caddy_base']
-        self.controller.prepare_handoff()
-        self.controller.prepare_handoff()
-        record=self.controller.state['releases']['initial']
-        self.assertEqual(record['caddy'].count('shutdown_delay 5s'),1)
-        self.assertEqual(self.controller.config['handoff_version'],1)
+    def runtime_router(self):
+        c=self.controller
+        c.config.update(router={'id':'router'},network='private')
+        c.objects['ats-release-router']={'Image':'router','State':{'Status':'running'}}
+        (c.home/'router').mkdir()
+        current=c.state['releases']['initial'];current['proxy_slot']=0
+        for service in release.PAIR:
+            c.objects[current['containers'][service]]['NetworkSettings']={'Networks':{'private':{'IPAddress':'172.18.0.2' if service=='backend' else '172.18.0.3'}}}
+        target=copy.deepcopy(current);target.update(id='candidate',proxy_slot=1)
+        c.state['releases']['candidate']=target
+        runtime={'slot':'0','addresses':{},'ready':True,'commands':[]}
+        def command(value):
+            runtime['commands'].append(value)
+            if value.startswith('show map'):return '0x001 active '+runtime['slot']+'\n'
+            if value.startswith('set map'):runtime['slot']=value.split()[-1];return ''
+            if value.startswith('set server'):
+                runtime['addresses'][value.split()[2].split('/')[0]]=value.split()[-1];return ''
+            if value=='show stat':
+                return '# pxname,svname,status\n'+''.join(service+'_1,app,'+('UP' if runtime['ready'] else 'DOWN')+'\n' for service in release.PAIR)
+            if value=='show servers state':
+                return ''.join('1 '+name+' 1 app '+address+'\n' for name,address in runtime['addresses'].items())
+            raise AssertionError(value)
+        c.router_command=command
+        c.reload=lambda config: self.fail('Runtime switch must not reload Caddy')
+        return c,target,runtime
+
+    def test_runtime_switch_changes_one_map_for_both_services(self):
+        c,target,runtime=self.runtime_router()
+        c.switch(target)
+        self.assertEqual(runtime['slot'],'1')
+        self.assertEqual(sum(cmd.startswith('set map') for cmd in runtime['commands']),1)
+        self.assertEqual((c.home/'router'/'active.map').read_text(),'active 1\n')
+        self.assertEqual(set(runtime['addresses']),{'frontend_1','backend_1'})
+
+    def test_unhealthy_router_targets_never_change_map(self):
+        c,target,runtime=self.runtime_router();runtime['ready']=False
+        with self.assertRaisesRegex(RuntimeError,'not ready'):
+            c.switch(target)
+        self.assertEqual(runtime['slot'],'0')
+        self.assertFalse(any(cmd.startswith('set map') for cmd in runtime['commands']))
+
+    def test_stale_active_addresses_are_not_rewritten(self):
+        c,target,runtime=self.runtime_router();runtime['slot']='1'
+        with self.assertRaisesRegex(RuntimeError,'address mismatch'):
+            c.switch(target)
+        self.assertFalse(any(cmd.startswith('set server') for cmd in runtime['commands']))
 
     def test_success_keeps_previous_ready(self):
         self.deploy(1)

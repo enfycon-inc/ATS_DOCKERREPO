@@ -1,5 +1,8 @@
 """ATS release controller. Run as root over SSH; no listening port, no builds."""
 import copy
+import csv
+import ipaddress
+import socket
 import fcntl
 import hashlib
 import json
@@ -275,6 +278,8 @@ class Controller:
         record['assets'] = files
 
     def routing(self, record):
+        if self.config.get('proxy_caddy'):
+            return self.config['proxy_caddy']
         names = record['containers']
         config = self.config['caddy_base'].replace('backend:5000', names['backend'] + ':5000')
         config = config.replace('reverse_proxy ' + names['backend'] + ':5000',
@@ -327,7 +332,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             return
         record = self.state['releases'][pending]
         current = self.state['releases'][self.state['current']]
-        self.reload(current['caddy'])
+        self.switch(current)
         # Restore worker if a handoff started before interruption.
         candidate_worker = record['containers']['worker']
         if candidate_worker != current['containers']['worker']:
@@ -438,7 +443,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             record['status'] = 'switching'
             self.save()
             switched = True
-            self.reload(record['caddy'])
+            self.switch(record)
             self.public_checks(record)
             time.sleep(15)
             self.public_checks(record)
@@ -452,7 +457,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
         except Exception:
             try:
                 if switched:
-                    self.reload(old['caddy'])
+                    self.switch(old)
                 if worker_stopped:
                     if record['containers']['worker'] != old['containers']['worker']:
                         self.drain_worker(record['containers']['worker'])
@@ -496,10 +501,6 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
         target_hash = record.get('schema_hash') or hashlib.sha256(self.schema(record['images']['backend']).encode()).hexdigest()
         if old_hash != target_hash:
             raise RuntimeError('Rollback database compatibility review required')
-        self.state['pending'] = target
-        self.state['pending_action'] = 'rollback'
-        self.state['rollback_snapshot'] = copy.deepcopy(record)
-        self.save()
         self.state['pending'] = target
         self.state['pending_action'] = 'rollback'
         self.state['rollback_snapshot'] = copy.deepcopy(record)
@@ -552,10 +553,10 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                     self.healthy(record)
                     break
             self.save()
-            self.reload(record['caddy'])
+            self.switch(record)
             self.public_checks_fast(record)
         except Exception:
-            self.reload(old['caddy'])
+            self.switch(old)
             if worker_handoff:
                 output = self.docker('inspect', record['containers']['worker'], check=False)
                 if output.strip().startswith('[') and record['containers']['worker'] != old['containers']['worker']:
@@ -601,6 +602,11 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                 for child in value:
                     walk(child)
         walk(loaded)
+        if self.config.get('router'):
+            if not {'ats-release-router:3000','ats-release-router:5000'}.issubset(dials):
+                raise RuntimeError('Caddy router upstream mismatch')
+            self.verify_router(record)
+            return
         initial = record['caddy'] == self.config['caddy_base']
         for service, port in [('frontend',3000),('backend',5000)]:
             name = service if initial else record['containers'][service]
@@ -761,31 +767,197 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             if re.fullmatch(r'controller-gha-[0-9]+-[0-9]+\.py', path.name):
                 path.unlink()
 
-    def prepare_handoff(self):
-        if self.config.get('handoff_version') == 1:
+    def router_command(self, command):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(10)
+            client.connect(str(self.home / 'router' / 'admin.sock'))
+            client.sendall((command + '\n').encode())
+            client.shutdown(socket.SHUT_WR)
+            chunks = []
+            while True:
+                chunk = client.recv(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        return b''.join(chunks).decode()
+
+    def router_slot(self, record):
+        if 'proxy_slot' not in record:
+            occupied = {r['proxy_slot'] for r in self.state['releases'].values() if 'proxy_slot' in r}
+            record['proxy_slot'] = next(n for n in range(6) if n not in occupied)
+            self.save()
+        return str(record['proxy_slot'])
+
+    def router_addresses(self, record):
+        result = {}
+        for service in PAIR:
+            obj = self.inspect(record['containers'][service])
+            if obj['State']['Status'] != 'running' or obj['Image'] != record['images'][service]['id']:
+                raise RuntimeError('Router target is not the verified running image')
+            address = obj['NetworkSettings']['Networks'][self.config['network']]['IPAddress']
+            result[service] = str(ipaddress.IPv4Address(address))
+        return result
+
+    def router_configuration(self):
+        text = '''global
+  stats socket /route/admin.sock mode 600 level admin
+  maxconn 4096
+defaults
+  mode http
+  timeout connect 5s
+  timeout client 5m
+  timeout server 5m
+  timeout tunnel 1h
+frontend frontend
+  bind :3000
+  use_backend frontend_%[str(active),map(/route/active.map)]
+frontend backend
+  bind :5000
+  use_backend backend_%[str(active),map(/route/active.map)]
+'''
+        rows = {}
+        for record in self.state['releases'].values():
+            if 'proxy_slot' not in record:
+                continue
+            try:
+                rows[str(record['proxy_slot'])] = self.router_addresses(record)
+            except (RuntimeError, KeyError):
+                pass  # Older retained images need to be recreated before use.
+        for slot in range(6):
+            for service, port in [('frontend', 3000), ('backend', 5000)]:
+                address = rows.get(str(slot), {}).get(service, '127.0.0.1')
+                text += (f'backend {service}_{slot}\n  http-reuse safe\n'
+                         f'  server app {address}:{port} check inter 1s rise 1 fall 3\n')
+        return text
+
+    def verify_router(self, record):
+        slot = self.router_slot(record)
+        mapping = self.router_command('show map /route/active.map')
+        if not any(line.split()[1:] == ['active', slot] for line in mapping.splitlines() if len(line.split()) == 3):
+            raise RuntimeError('Active router release mismatch')
+        states = self.router_command('show servers state').splitlines()
+        for service, address in self.router_addresses(record).items():
+            if not any(len(row := line.split()) > 4 and row[1] == service + '_' + slot and row[3] == 'app' and row[4] == address for line in states):
+                raise RuntimeError('Runtime router address mismatch: ' + service)
+
+    def switch(self, record):
+        if not self.config.get('router'):
+            self.reload(record['caddy'])
+            return
+        slot = self.router_slot(record)
+        addresses = self.router_addresses(record)
+        folder = self.home / 'router'
+        obj = self.inspect('ats-release-router')
+        if obj['Image'] != self.config['router']['id']:
+            raise RuntimeError('Unexpected router image; review required')
+        if obj['State']['Status'] != 'running':
+            self.docker('start', 'ats-release-router')
+        deadline = time.monotonic() + 20
+        while True:
+            try:
+                self.router_command('show map /route/active.map')
+                break
+            except (OSError, TimeoutError):
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Router runtime unavailable')
+                time.sleep(.2)
+        # Persist validated server addresses for a Docker/VPS restart. The running
+        # process is never reloaded during a release switch.
+        atomic(folder / 'haproxy.cfg', self.router_configuration())
+        self.docker('exec', 'ats-release-router', 'haproxy', '-c', '-f', '/route/haproxy.cfg')
+        active = self.router_command('show map /route/active.map')
+        selected = any(line.split()[1:] == ['active', slot] for line in active.splitlines() if len(line.split()) == 3)
+        for service, address in addresses.items():
+            name = service + '_' + slot + '/app'
+            if selected:
+                # Never rewrite an active target; a stale journal must recover
+                # using another slot rather than disturb in-flight requests.
+                self.verify_router(record)
+                break
+            self.router_command('set server ' + name + ' addr ' + address)
+        deadline = time.monotonic() + 15
+        while True:
+            stats = csv.DictReader(self.router_command('show stat').lstrip('# ').splitlines())
+            ready = {row['pxname'] for row in stats if row['svname'] == 'app' and row['status'] == 'UP'}
+            if {'frontend_' + slot, 'backend_' + slot}.issubset(ready):
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError('Router targets not ready; traffic unchanged')
+            time.sleep(.2)
+        atomic(folder / 'active.map', 'active ' + slot + '\n')
+        self.router_command('set map /route/active.map active ' + slot)
+        self.verify_router(record)
+
+    def prepare_router(self):
+        if self.config.get('router'):
             return
         current = self.state['releases'][self.state['current']]
         self.assert_routes_unchanged(current)
         original = copy.deepcopy(self.state)
-        base = self.config['caddy_base']
-        def delayed(text):
-            if not text.startswith('{\n'):
-                raise RuntimeError('Review Caddy global options before handoff setup')
-            return text.replace('{\n','{\n  shutdown_delay 5s\n',1)
+        old_config = copy.deepcopy(self.config)
+        folder = self.home / 'router'
+        folder.mkdir(mode=0o700, exist_ok=True)
+        self.admission(64 * 1024**2)
+        migration = self.home / 'router-migration.json'
+        atomic(migration, {'state': original, 'config': old_config})
         try:
-            self.config['caddy_base'] = delayed(base)
             for record in self.state['releases'].values():
-                record['caddy'] = delayed(record['caddy'])
-            self.reload(current['caddy'])
+                self.router_slot(record)
+            atomic(folder / 'haproxy.cfg', self.router_configuration())
+            atomic(folder / 'active.map', 'active ' + self.router_slot(current) + '\n')
+            self.docker('pull', 'haproxy:3.2-alpine', timeout=180)
+            image = self.image('haproxy:3.2-alpine')
+            self.docker('run', '--rm', '--user', '0:0', '--network', 'none',
+                        '-v', str(folder) + ':/route', image['id'],
+                        'haproxy', '-c', '-f', '/route/haproxy.cfg')
+            self.docker('run', '-d', '--name', 'ats-release-router', '--user', '0:0',
+                        '--network', self.config['network'], '--restart', 'unless-stopped',
+                        '--memory', str(64 * 1024**2), '--cpus', '0.15',
+                        '--cgroup-parent', self.config['resource_group'],
+                        '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+                        '--log-opt', 'max-size=5m', '--log-opt', 'max-file=2',
+                        '-v', str(folder) + ':/route', image['id'],
+                        'haproxy', '-W', '-db', '-f', '/route/haproxy.cfg')
+            self.config['router'] = image
+            deadline = time.monotonic() + 20
+            while not (folder / 'admin.sock').exists():
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('Router runtime socket unavailable')
+                time.sleep(.2)
+            self.switch(current)
+            routed = copy.deepcopy(current)
+            routed['containers'].update(frontend='ats-release-router', backend='ats-release-router')
+            self.config['proxy_caddy'] = self.routing(routed)
+            self.reload(self.config['proxy_caddy'])  # One-time infrastructure migration.
+            for record in self.state['releases'].values():
+                record['caddy'] = self.config['proxy_caddy']
             self.public_checks_fast(current)
-            self.config['handoff_version'] = 1
             atomic(self.home / 'runtime.json', self.config)
             self.save()
+            migration.unlink()
         except Exception:
+            self.config = old_config
             self.state = original
-            self.config['caddy_base'] = base
             self.reload(original['releases'][original['current']]['caddy'])
+            atomic(self.home / 'runtime.json', self.config)
+            self.save()
+            self.docker('rm', '-f', 'ats-release-router', check=False)
+            migration.unlink(missing_ok=True)
             raise
+
+    def recover_router_migration(self):
+        marker = self.home / 'router-migration.json'
+        if not marker.exists():
+            return
+        original = json.loads(marker.read_text())
+        self.config, self.state = original['config'], original['state']
+        self.reload(self.state['releases'][self.state['current']]['caddy'])
+        atomic(self.home / 'runtime.json', self.config)
+        self.save()
+        self.docker('rm', '-f', 'ats-release-router', check=False)
+        marker.unlink()
+        print('Recovered interrupted one-time router setup')
+
 
 
 def main():
@@ -801,22 +973,25 @@ def main():
                               'retained': retained_ids(controller.state), 'pending': controller.state['pending'],
                               'cleanup_error': controller.state.get('cleanup_error')}))
             return
+        controller.recover_router_migration()
         controller.initialize()
         controller.recover()
         if action in ('deploy', 'bootstrap'):
-            controller.prepare_handoff()
+            controller.prepare_router()
             requested = json.loads(os.environ.get('DEPLOY_IMAGES', '{}'))
             controller.deploy(os.environ['RELEASE_ID'], requested)
             controller.install_operations()
         elif action == 'rollback':
-            controller.prepare_handoff()
+            controller.prepare_router()
             controller.rollback(os.environ.get('ROLLBACK_TARGET') or None)
         elif action == 'cleanup':
             controller.cleanup()
         elif action == 'backup':
             controller.backup()
         elif action == 'reconcile':
-            pass
+            if controller.config.get('router'):
+                controller.switch(controller.state['releases'][controller.state['current']])
+                controller.public_checks_fast(controller.state['releases'][controller.state['current']])
         else:
             raise ValueError('Unknown release action')
 
