@@ -1,15 +1,15 @@
 # ATS GitHub releases
 
-GitHub builds and tests images before the production job can connect to the VPS.
-Backend business checks use a disposable PostgreSQL, Redis and Keycloak on the
-runner. Production deployments use immutable image digests and a private release
+GitHub runs source checks and builds images before the production job can connect
+to the VPS. Automatic disposable staging was removed at the user's request to
+shorten the pipeline. Production deployments use immutable image digests and a private release
 journal at `/var/www/ats-prod/bluegreen/state.json`.
 
 ## Use GitHub Actions
 
 Open **ATS CI/CD - blue green production**, choose **Run workflow**, branch `main`.
 
-* `deploy`: build the selected service(s), stage them, then activate. Normal source
+* `deploy`: check/build the selected service(s), then activate. Normal source
   repository pushes dispatch this automatically. All required jobs must pass.
 * `rollback`: leave the target blank for the previous successful release, or enter
   one of the five retained release IDs shown by `status`.
@@ -18,7 +18,8 @@ Open **ATS CI/CD - blue green production**, choose **Run workflow**, branch `mai
 * `bootstrap`: convert existing verified application images to release pairs
   without rebuilding them. Downloads the internal proxy during initial setup.
 * `existing_release`: optional explicit retry of a previously built `gha-RUN-ATTEMPT`
-  image tag. It is tested again on the runner before production pulls it.
+  image tag. Its digest is resolved on the runner; production readiness checks
+  still run before traffic switches.
 
 ## What happens on the VPS
 
@@ -77,3 +78,13 @@ under load. One VPS is not high availability against host/database outages.
 Full backend tests are intentionally enforced. Existing application test failures
 must be resolved rather than bypassed to publish a new backend build. The initial
 bootstrap reuses the already-running application binaries.
+
+## Faster verification alternative
+
+Normal releases keep source checks, parallel cached builds, candidate health,
+password login/refresh checks, and automatic recovery on failed activation.
+They do not create temporary accounts or jobs. Run the retained isolated
+`stage.py` / `stage-smoke.cjs` checks manually when authentication, account,
+job, permission, or database behavior changes. These checks need a disposable
+environment and must never be pointed at the production database. A permanent
+team staging site and shared development environment remain unconfigured.

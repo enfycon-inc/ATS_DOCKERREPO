@@ -2,6 +2,12 @@
 
 ## Objectives and current architecture
 
+Update, 7 October 2026: the user requested removing automatic disposable staging
+to shorten releases. The active workflow retains source checks, parallel cached
+builds, production candidate readiness/login checks, rollback, and retention.
+The isolated account/job business checks remain available for manual use only;
+the automatic staging portions below describe the original proposal.
+
 GitHub Actions builds and publishes frontend, backend and parser images to GHCR.
 Production currently runs one container per service and deploys by restarting it.
 Caddy serves the root, API, authentication and dynamic tenant domains. The ATS

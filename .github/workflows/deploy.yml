@@ -18,7 +18,7 @@ on:
         options: [all, frontend, backend, parser]
         default: all
       existing_release:
-        description: Optional already-built gha-RUN-ATTEMPT tag (staging checks still run)
+        description: Optional already-built gha-RUN-ATTEMPT tag (production readiness checks still run)
         type: string
         default: ''
       rollback_target:
@@ -38,9 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 deployment/bluegreen/test_release.py
-      - run: python3 -m py_compile deployment/bluegreen/release.py deployment/bluegreen/stage.py
+      - run: python3 -m py_compile deployment/bluegreen/release.py
   build:
-    name: Build and stage ${{ matrix.tag }}
+    name: Build ${{ matrix.tag }}
     needs: verify
     if: github.ref == 'refs/heads/main' && (!inputs.operation || inputs.operation == 'deploy') && !inputs.existing_release
     runs-on: ubuntu-latest
@@ -148,16 +148,7 @@ jobs:
             NEXT_DEPLOYMENT_ID=${{ steps.source.outputs.revision }}
           cache-from: type=gha,scope=${{ matrix.tag }}
           cache-to: type=gha,mode=max,scope=${{ matrix.tag }}
-      - name: Pull and test image in isolated staging
-        if: env.skip != 'true'
-        working-directory: orchestrator
-        env:
-          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/${{ matrix.tag }}@${{ steps.image.outputs.digest }}
-          SERVICE: ${{ matrix.service }}
-        run: |
-          docker pull "$IMAGE_REF"
-          python3 deployment/bluegreen/stage.py "$SERVICE" "$IMAGE_REF"
-      - name: Record tested image
+      - name: Record built image
         if: env.skip != 'true'
         env:
           SERVICE: ${{ matrix.service }}
@@ -166,7 +157,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: env.skip != 'true'
         with:
-          name: tested-${{ matrix.service }}
+          name: built-${{ matrix.service }}
           path: image.json
   release:
     name: Verify and activate production release
@@ -178,15 +169,15 @@ jobs:
       - uses: actions/download-artifact@v4
         if: needs.build.result == 'success'
         with:
-          pattern: tested-*
-          path: tested
+          pattern: built-*
+          path: built
       - uses: docker/login-action@v3
         if: ${{ !inputs.operation || inputs.operation == 'deploy' }}
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Prepare tested release and controller
+      - name: Prepare built release and controller
         env:
           OPERATION: ${{ inputs.operation || 'deploy' }}
           SERVICE: ${{ inputs.service || 'all' }}

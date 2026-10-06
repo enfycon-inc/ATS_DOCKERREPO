@@ -23,10 +23,9 @@ if operation == 'deploy':
             subprocess.run(['docker','pull',reference],check=True)
             obj = json.loads(subprocess.check_output(['docker','image','inspect',reference]))[0]
             digest = next(d for d in obj['RepoDigests'] if d.startswith('ghcr.io/'+os.environ['IMAGE_OWNER'].lower()+'/ats-'+service+'@'))
-            subprocess.run(['python3','deployment/bluegreen/stage.py',service,digest],check=True)
             images[service] = digest
     else:
-        for file in Path('tested').rglob('image.json'):
+        for file in Path('built').rglob('image.json'):
             for service, reference in json.loads(file.read_text()).items():
                 if service in images:
                     raise ValueError('Duplicate service image')
@@ -37,7 +36,7 @@ if operation == 'deploy':
                         'enfycon-inc/resume-parser':'parser'}[os.environ['DISPATCH_REPO']]
         expected_set = {'frontend','backend','parser'} if expected == 'all' else {expected}
         if set(images) != expected_set:
-            raise ValueError('Required tested image artifacts are missing')
+            raise ValueError('Required built image artifacts are missing')
 elif operation not in ('bootstrap','rollback','status','cleanup'):
     raise ValueError('Unknown production operation')
 controller = base64.b64encode(Path('deployment/bluegreen/release.py').read_bytes()).decode()
