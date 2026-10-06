@@ -143,7 +143,9 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.tag }}:gha-${{ github.run_id }}-${{ github.run_attempt }}
           labels: org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
-          build-args: NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
+            NEXT_DEPLOYMENT_ID=${{ steps.source.outputs.revision }}
           cache-from: type=gha,scope=${{ matrix.tag }}
           cache-to: type=gha,mode=max,scope=${{ matrix.tag }}
       - name: Pull and test image in isolated staging

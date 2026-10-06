@@ -761,6 +761,32 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             if re.fullmatch(r'controller-gha-[0-9]+-[0-9]+\.py', path.name):
                 path.unlink()
 
+    def prepare_handoff(self):
+        if self.config.get('handoff_version') == 1:
+            return
+        current = self.state['releases'][self.state['current']]
+        self.assert_routes_unchanged(current)
+        original = copy.deepcopy(self.state)
+        base = self.config['caddy_base']
+        def delayed(text):
+            if not text.startswith('{\n'):
+                raise RuntimeError('Review Caddy global options before handoff setup')
+            return text.replace('{\n','{\n  shutdown_delay 5s\n',1)
+        try:
+            self.config['caddy_base'] = delayed(base)
+            for record in self.state['releases'].values():
+                record['caddy'] = delayed(record['caddy'])
+            self.reload(current['caddy'])
+            self.public_checks_fast(current)
+            self.config['handoff_version'] = 1
+            atomic(self.home / 'runtime.json', self.config)
+            self.save()
+        except Exception:
+            self.state = original
+            self.config['caddy_base'] = base
+            self.reload(original['releases'][original['current']]['caddy'])
+            raise
+
 
 def main():
     root, action = sys.argv[1:3]
@@ -778,10 +804,12 @@ def main():
         controller.initialize()
         controller.recover()
         if action in ('deploy', 'bootstrap'):
+            controller.prepare_handoff()
             requested = json.loads(os.environ.get('DEPLOY_IMAGES', '{}'))
             controller.deploy(os.environ['RELEASE_ID'], requested)
             controller.install_operations()
         elif action == 'rollback':
+            controller.prepare_handoff()
             controller.rollback(os.environ.get('ROLLBACK_TARGET') or None)
         elif action == 'cleanup':
             controller.cleanup()

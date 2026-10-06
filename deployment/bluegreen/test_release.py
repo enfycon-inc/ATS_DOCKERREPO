@@ -157,6 +157,15 @@ class Tests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'review'):
             release.Controller.assert_routes_unchanged(self.controller,record)
 
+    def test_handoff_delay_is_added_once_to_all_snapshots(self):
+        self.controller.config['caddy_base']='{\n}\nreverse_proxy frontend:3000'
+        self.controller.state['releases']['initial']['caddy']=self.controller.config['caddy_base']
+        self.controller.prepare_handoff()
+        self.controller.prepare_handoff()
+        record=self.controller.state['releases']['initial']
+        self.assertEqual(record['caddy'].count('shutdown_delay 5s'),1)
+        self.assertEqual(self.controller.config['handoff_version'],1)
+
     def test_success_keeps_previous_ready(self):
         self.deploy(1)
         self.assertEqual(self.controller.state['current'],'gha-1-1')
