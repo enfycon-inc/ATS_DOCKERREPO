@@ -25,9 +25,11 @@ Open **ATS CI/CD - blue green production**, choose **Run workflow**, branch `mai
 
 1. Acquire the same exclusive lock used by local deployment tools.
 2. Capture the initial infrastructure, secrets and mounted adapter configuration
-   privately. Refuse changed Prisma schemas pending a compatible migration review.
-3. Check memory/disk headroom inside the existing ATS allocation. Start a new
-   frontend/backend pair; each frontend addresses its own backend.
+   privately. New backend images must carry immutable Prisma migration history.
+3. Check memory/disk headroom inside the existing ATS allocation. Back up before
+   running reviewed additive migrations with `prisma migrate deploy`. Verify
+   schema drift, then start a frontend/backend pair; each frontend addresses its
+   own backend. Failed migrations leave the current application serving traffic.
 4. Check running image identities, readiness, password login and refresh. Preserve
    retained Next.js static assets for browsers opened before the release.
 5. Back up the database/uploads. Wait for both targets in the internal HAProxy to
@@ -69,8 +71,11 @@ Repository secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, optional `VPS_PORT`,
 and `GH_PAT` for the private source checkouts. The verified host-key fingerprint
 is stored in the repository variable `VPS_HOST_FINGERPRINT`.
 
-No automatic schema synchronization or destructive migrations are permitted.
+No whole-schema synchronization or destructive automatic migrations are permitted.
+Prisma's applied migration checksums must match the image. Pending migrations
+require `-- ATS: rollback-compatible`, a transaction, and a five-second lock wait.
 Use backward-compatible migrations that work with active and rollback images.
+The initial Prisma baseline is adopted without replaying application DDL.
 Backups are retained locally for seven days; this does not replace off-server
 backup storage. The allocation remains one CPU / 3,800 MiB and can refuse a rollout
 under load. One VPS is not high availability against host/database outages.

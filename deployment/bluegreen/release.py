@@ -25,6 +25,20 @@ def canonical_schema(value):
     return value.replace('\r\n', '\n').rstrip('\n')
 
 
+def validate_additive_migration(sql):
+    if '-- ATS: rollback-compatible' not in sql:
+        raise RuntimeError('Migration needs an explicit rollback compatibility review')
+    plain = re.sub(r'/\*.*?\*/|--[^\n]*', '', sql, flags=re.S)
+    # Referential actions are DDL, not data mutations.
+    plain = re.sub(r'\bON\s+(DELETE|UPDATE)\s+(CASCADE|RESTRICT|NO\s+ACTION|SET\s+(NULL|DEFAULT))', '', plain, flags=re.I)
+    if re.search(r'\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|RENAME)\b|\bALTER\s+COLUMN\b|\bDISABLE\s+TRIGGER\b', plain, re.I):
+        raise RuntimeError('Destructive/data-changing migration needs separate review; traffic unchanged')
+    if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
+        raise RuntimeError('Migration must be transactional')
+    if not re.search(r"SET\s+LOCAL\s+lock_timeout\s*=\s*'5s'", plain, re.I):
+        raise RuntimeError('Migration must bound lock waits to five seconds')
+
+
 def retained_ids(state):
     order = [state['current'], state.get('previous'), *reversed(state['successful'])]
     return list(dict.fromkeys(x for x in order if x))[:5]
@@ -65,7 +79,7 @@ class Controller:
                 for template in self.config['templates'].values():
                     for item in template['Config']['Env']:
                         key, _, value = item.partition('=')
-                        if re.search('PASSWORD|SECRET|TOKEN', key, re.I) and len(value) > 3:
+                        if re.search('PASSWORD|SECRET|TOKEN|DATABASE_URL', key, re.I) and len(value) > 3:
                             output = output.replace(value, '[redacted]')
             raise RuntimeError(output or 'Command failed: ' + args[0])
         return result.stdout
@@ -254,6 +268,52 @@ class Controller:
             raise RuntimeError('Empty Prisma schema')
         return canonical_schema(value)
 
+    def migrate(self, image, old_hash, new_hash):
+        baseline = self.config.get('prisma_baseline')
+        if not baseline:
+            raise RuntimeError('Adopt the production Prisma baseline before a new backend release')
+        active = self.state['releases'][self.state['current']]['containers']['backend']
+        query = "(async()=>{const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();try{console.log(JSON.stringify(await p.$queryRawUnsafe('SELECT migration_name,checksum,finished_at,rolled_back_at FROM ats._prisma_migrations ORDER BY started_at')))}finally{await p.$disconnect()}})().catch(()=>{console.error('Prisma migration history unavailable');process.exit(1)})"
+        history = json.loads(self.docker('exec', active, 'node', '-e', query))
+        if any(not row['finished_at'] and not row['rolled_back_at'] for row in history):
+            raise RuntimeError('A failed Prisma migration requires explicit resolution')
+        applied = {row['migration_name']:row['checksum'] for row in history if row['finished_at'] and not row['rolled_back_at']}
+        with tempfile.TemporaryDirectory(dir=self.home, prefix='migration-') as tmp:
+            folder = Path(tmp)
+            container = self.docker('create', '--network', 'none', '--entrypoint', 'cat', image['id']).strip()
+            try:
+                self.docker('cp', container + ':/app/prisma/.', str(folder))
+            finally:
+                self.docker('rm', container)
+            files = {p.parent.name:p for p in (folder / 'migrations').glob('*/migration.sql')}
+            if not files or not set(applied).issubset(files):
+                raise RuntimeError('Backend image is missing Prisma migration history')
+            if applied.get(baseline['name']) != baseline['checksum']:
+                raise RuntimeError('Production Prisma baseline does not match the reviewed baseline')
+            for name, path in sorted(files.items()):
+                checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+                if name in applied:
+                    if checksum != applied[name]:
+                        raise RuntimeError('An applied migration was changed: ' + name)
+                else:
+                    validate_additive_migration(path.read_text())
+            values = dict(item.split('=',1) for item in self.config['templates']['backend']['Config']['Env'])
+            values.update(CHECKPOINT_DISABLE='1', PRISMA_HIDE_UPDATE_MESSAGE='1')
+            env = folder / 'migration.env'
+            atomic(env, '\n'.join(k+'='+v for k,v in values.items())+'\n')
+            self.admission(256 * 1024**2)
+            args = ['run', '--rm', '--network', self.config['network'], '--memory', str(256*1024**2),
+                    '--cpus', '0.5', '--cgroup-parent', self.config['resource_group'], '--env-file', str(env),
+                    '--entrypoint', '/app/node_modules/.bin/prisma', image['id']]
+            self.docker(*args, 'migrate', 'deploy', '--schema', '/app/prisma/schema.prisma', timeout=180)
+            self.docker(*args, 'migrate', 'diff', '--from-schema-datasource', '/app/prisma/schema.prisma',
+                        '--to-schema-datamodel', '/app/prisma/schema.prisma', '--exit-code', timeout=90)
+        compatible = set(self.config.get('compatible_schema_hashes', []))
+        compatible.update([old_hash, new_hash])
+        self.config['compatible_schema_hashes'] = sorted(compatible)
+        atomic(self.home / 'runtime.json', self.config)
+        print('PRISMA_MIGRATIONS_VERIFIED')
+
     def assets(self, record):
         folder = self.home / 'releases' / record['id'] / 'assets'
         folder.mkdir(parents=True, exist_ok=True)
@@ -415,14 +475,17 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                     record['images']['worker'] = copy.deepcopy(record['images']['parser'])
             old_hash = old.get('schema_hash') or hashlib.sha256(self.schema(old['images']['backend']).encode()).hexdigest()
             new_hash = hashlib.sha256(self.schema(record['images']['backend']).encode()).hexdigest()
-            if old_hash != new_hash:
-                raise RuntimeError('Prisma schema changed: apply a reviewed compatible migration separately')
             record['schema_hash'] = new_hash
             parser_changed = record['images']['parser']['id'] != old['images']['parser']['id']
             extra = sum(self.config['templates'][s]['HostConfig']['Memory'] for s in PAIR)
             if parser_changed:
                 extra += self.config['templates']['parser']['HostConfig']['Memory']
             self.admission(extra)
+            backed_up = False
+            if record['images']['backend']['id'] != old['images']['backend']['id'] or old_hash != new_hash:
+                self.backup()
+                backed_up = True
+                self.migrate(record['images']['backend'], old_hash, new_hash)
             if parser_changed:
                 self.clone('parser', record, record['images']['parser'])
                 self.healthy(record, ['parser'])
@@ -433,7 +496,8 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             self.assets(record)
             record['caddy'] = self.routing(record)
             self.save()
-            self.backup()
+            if not backed_up:
+                self.backup()
             if parser_changed:
                 # Celery SIGTERM performs warm shutdown, completing active tasks.
                 worker_stopped = True
@@ -499,7 +563,8 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
         self.assert_routes_unchanged(old)
         old_hash = old.get('schema_hash') or hashlib.sha256(self.schema(old['images']['backend']).encode()).hexdigest()
         target_hash = record.get('schema_hash') or hashlib.sha256(self.schema(record['images']['backend']).encode()).hexdigest()
-        if old_hash != target_hash:
+        compatible = set(self.config.get('compatible_schema_hashes', []))
+        if old_hash != target_hash and not {old_hash,target_hash}.issubset(compatible):
             raise RuntimeError('Rollback database compatibility review required')
         self.state['pending'] = target
         self.state['pending_action'] = 'rollback'
@@ -1008,7 +1073,8 @@ def main():
                 return
             print(json.dumps({'current': controller.state['current'], 'previous': controller.state['previous'],
                               'retained': retained_ids(controller.state), 'pending': controller.state['pending'],
-                              'cleanup_error': controller.state.get('cleanup_error')}))
+                              'cleanup_error': controller.state.get('cleanup_error'),
+                              'prisma_baseline': controller.config.get('prisma_baseline', {}).get('name')}))
             return
         controller.recover_router_migration()
         controller.restore_retirement_queues()

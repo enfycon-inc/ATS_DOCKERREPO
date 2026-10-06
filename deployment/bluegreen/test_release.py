@@ -84,6 +84,9 @@ class Fake(release.Controller):
     def schema(self, image):
         return 'changed' if self.mode == 'schema' and image['id'].startswith('new-') else 'same'
 
+    def migrate(self, image, old_hash, new_hash):
+        if self.mode=='schema':raise RuntimeError('Unreviewed schema migration')
+
     def assets(self, record):
         pass
 
@@ -133,6 +136,15 @@ class Tests(unittest.TestCase):
     def test_crlf_only_is_not_schema_change(self):
         self.assertEqual(release.canonical_schema('model A {\r\n}\r\n'),release.canonical_schema('model A {\n}\n'))
         self.assertNotEqual(release.canonical_schema('id Int'),release.canonical_schema('id String'))
+
+    def test_additive_migration_requires_review_transaction_and_lock_bound(self):
+        prefix="-- ATS: rollback-compatible\nBEGIN;\nSET LOCAL lock_timeout = '5s';\n"
+        release.validate_additive_migration(prefix+'ALTER TABLE ats.jobs ADD COLUMN example TEXT;\nCOMMIT;')
+        for sql in [prefix+'DROP TABLE ats.jobs; COMMIT;',prefix+'UPDATE ats.jobs SET title=\'x\'; COMMIT;',
+                    prefix+'ALTER TABLE ats.jobs ALTER COLUMN title SET NOT NULL; COMMIT;',
+                    prefix.replace('-- ATS: rollback-compatible','')+'SELECT 1; COMMIT;',
+                    prefix.replace("SET LOCAL lock_timeout = '5s';",'')+'SELECT 1; COMMIT;']:
+            with self.assertRaises(RuntimeError):release.validate_additive_migration(sql)
 
     def test_unlabeled_legacy_image_is_supported(self):
         self.controller.docker=lambda *args,**kw: json.dumps([{'Id':'legacy','RepoDigests':[],'Config':{'Labels':None}}])

@@ -1,0 +1,181 @@
+name: ats-prod
+x-common: &common
+  restart: unless-stopped
+  cgroup_parent: ats.slice
+  cpus: 1.0
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: "3"}
+services:
+  postgres:
+    <<: *common
+    image: postgres:16-alpine
+    mem_limit: 384m
+    command: [postgres, -c, shared_buffers=128MB, -c, max_connections=60, -c, work_mem=4MB]
+    environment:
+      POSTGRES_DB: ats_db
+      POSTGRES_USER: ats_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-schemas.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U ats_user -d ats_db]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+  redis:
+    <<: *common
+    image: redis:7-alpine
+    mem_limit: 64m
+    command: [redis-server, --appendonly, "yes", --maxmemory, 40mb, --maxmemory-policy, noeviction]
+    volumes: [redis_data:/data]
+  keycloak:
+    <<: *common
+    image: quay.io/keycloak/keycloak:24.0
+    mem_limit: 768m
+    command: [start, --import-realm]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?required}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?required}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/ats_db
+      KC_DB_USERNAME: ats_user
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      KC_DB_SCHEMA: keycloak
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME: auth.enfyjobs.com
+      KC_HOSTNAME_STRICT: "true"
+      KC_HOSTNAME_STRICT_HTTPS: "true"
+      JAVA_OPTS_APPEND: -Xms128m -Xmx448m -XX:ActiveProcessorCount=1
+    volumes: [./realm.json:/opt/keycloak/data/import/realm.json:ro]
+    depends_on:
+      postgres: {condition: service_healthy}
+  migrate:
+    <<: *common
+    image: ${BACKEND_IMAGE:?required}
+    pull_policy: never
+    restart: "no"
+    mem_limit: 256m
+    entrypoint: [/app/node_modules/.bin/prisma]
+    command: [migrate, deploy, --schema, /app/prisma/schema.prisma]
+    environment:
+      DATABASE_URL: postgresql://ats_user:${POSTGRES_PASSWORD}@postgres:5432/ats_db?schema=ats&options=-csearch_path%3Dats,mass_mail,public
+      CHECKPOINT_DISABLE: "1"
+      PRISMA_HIDE_UPDATE_MESSAGE: "1"
+    depends_on:
+      postgres: {condition: service_healthy}
+  backend:
+    <<: *common
+    image: ${BACKEND_IMAGE:?required}
+    pull_policy: never
+    mem_limit: 256m
+    env_file: [.env.backend]
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      NODE_OPTIONS: --max-old-space-size=192 --dns-result-order=ipv4first
+      DATABASE_URL: postgresql://ats_user:${POSTGRES_PASSWORD}@postgres:5432/ats_db?schema=ats&options=-csearch_path%3Dats,mass_mail,public
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PYTHON_PARSER_URL: http://parser:8000
+      BASE_DOMAIN: enfyjobs.com
+      FRONTEND_URL: https://enfyjobs.com
+      KEYCLOAK_ISSUER: https://auth.enfyjobs.com/realms/enfycon-ats
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_CLIENT_ID: enfycon-ats
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID}
+      PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
+      PLATFORM_ADMIN_NAME: Platform Administrator
+    volumes: [uploads:/app/public, candidate_uploads:/app/uploads]
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_started}
+      keycloak: {condition: service_started}
+    healthcheck:
+      test: [CMD, node, -e, "require('http').get('http://127.0.0.1:5000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      retries: 30
+      start_period: 30s
+  frontend:
+    <<: *common
+    image: ${FRONTEND_IMAGE:?required}
+    pull_policy: never
+    mem_limit: 320m
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      NODE_OPTIONS: --max-old-space-size=224
+      AUTH_TRUST_HOST: "true"
+      AUTH_SECRET: ${AUTH_SECRET:?required}
+      NEXTAUTH_SECRET: ${AUTH_SECRET}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID}
+      INTERNAL_API_URL: http://backend:5000
+      NEXT_PUBLIC_API_URL: https://api.enfyjobs.com
+      NEXT_PUBLIC_MAIN_DOMAIN_URL: https://enfyjobs.com
+      NEXT_PUBLIC_SITE_URL: https://enfyjobs.com
+      KEYCLOAK_ISSUER: https://auth.enfyjobs.com/realms/enfycon-ats
+      KEYCLOAK_CLIENT_ID: enfycon-ats
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_REFRESH_TOKEN_TTL_SECONDS: "36000"
+    healthcheck:
+      test: [CMD, node, -e, "require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 4s
+      retries: 20
+  parser:
+    <<: *common
+    image: ${PARSER_IMAGE:?required}
+    pull_policy: never
+    mem_limit: 896m
+    volumes: [./parser-database.py:/app/app/database.py:ro, ./parser-runtime.py:/app/app/parser.py:ro]
+    networks:
+      default:
+        aliases: [api]
+    environment: &parser-env
+      DATABASE_URL: postgresql://ats_user:${POSTGRES_PASSWORD}@postgres:5432/ats_db
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      HF_HOME: /opt/models
+      HF_HUB_OFFLINE: "1"
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_started}
+  worker:
+    <<: *common
+    image: ${PARSER_IMAGE:?required}
+    pull_policy: never
+    mem_limit: 1024m
+    volumes: [./parser-database.py:/app/app/database.py:ro, ./parser-runtime.py:/app/app/parser.py:ro]
+    command: [celery, -A, app.celery_app, worker, --loglevel=info, --concurrency=1, --pool=solo]
+    environment: *parser-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_started}
+  caddy:
+    <<: *common
+    image: caddy:2-alpine
+    mem_limit: 64m
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  postgres_data:
+  redis_data:
+  uploads:
+  candidate_uploads:
+  caddy_data:
+  caddy_config:

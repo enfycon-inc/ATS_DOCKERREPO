@@ -8,6 +8,16 @@ builds, production candidate readiness/login checks, rollback, and retention.
 The isolated account/job business checks remain available for manual use only;
 the automatic staging portions below describe the original proposal.
 
+Prisma adoption completed on 7 October 2026: preserve shared parser structures
+in the datamodel, establish a standard checked-in baseline, and record it as
+already applied on the backed-up existing VPS database. New backend images carry
+the complete immutable migration history. Deployment invokes `prisma migrate
+deploy` before candidate startup, checks for schema drift, and permits only
+explicitly reviewed additive transactional changes with bounded lock waits.
+Rollback uses the compatible schema hashes recorded after successful migration
+verification; it never reverses database data. Destructive changes remain outside
+automatic blue/green deployment. The application unit-test blockers are separate.
+
 GitHub Actions builds and publishes frontend, backend and parser images to GHCR.
 Production currently runs one container per service and deploys by restarting it.
 Caddy serves the root, API, authentication and dynamic tenant domains. The ATS
