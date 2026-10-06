@@ -8,6 +8,11 @@ on:
   repository_dispatch:
     types: [microservice-updated]
   workflow_dispatch:
+    inputs:
+      check_only:
+        description: Test VPS connection without building or deploying
+        type: boolean
+        default: false
 
 concurrency:
   group: production-deployment
@@ -19,23 +24,34 @@ permissions:
 
 jobs:
   verify:
-    name: Verify Config Integrity
+    name: Verify Current VPS
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Orchestrator Code
         uses: actions/checkout@v4
 
-      - name: Validate Docker Compose Configuration
-        run: |
-          mkdir -p ats_frontend_main ats_backend resume-parser-main keycloak/import caddy_upstreams
-          touch ats_frontend_main/.env ats_backend/.env resume-parser-main/.env
-          docker compose -f docker-compose.prod.yml config
+      - name: Check SSH connection and current installation
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER || 'ubuntu' }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd /var/www/ats-prod
+            test -f compose.yml
+            test -f .env
+            test -f backup.sh
+            sudo -n docker info >/dev/null
+            sudo -n docker compose -f compose.yml config --quiet
+            echo 'Current VPS installation verified'
 
   build:
     name: Build & Push ${{ matrix.tag }}
     needs: verify
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && !inputs.check_only
     strategy:
       fail-fast: false
       matrix:
@@ -78,7 +94,20 @@ jobs:
         with:
           repository: ${{ matrix.repo }}
           path: ${{ matrix.path }}
+          ref: ${{ github.event.client_payload.repo == matrix.repo && github.event.client_payload.ref || 'main' }}
           token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout Deployment Configuration
+        if: env.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          path: orchestrator
+
+      - name: Record source revision
+        if: env.skip != 'true'
+        id: source
+        working-directory: ${{ matrix.path }}
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         if: env.skip != 'true'
@@ -97,54 +126,34 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.path }}
-          file: ./${{ matrix.path }}/${{ matrix.dockerfile }}
+          file: ${{ matrix.tag == 'ats-parser' && 'orchestrator/deployment/production/Dockerfile.parser' || format('./{0}/{1}', matrix.path, matrix.dockerfile) }}
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.tag }}:latest
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.tag }}:gha-${{ github.run_id }}-${{ github.run_attempt }}
+          build-args: NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
+          labels: org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
           cache-from: type=gha,scope=${{ matrix.tag }}
           cache-to: type=gha,mode=max,scope=${{ matrix.tag }}
 
   deploy:
-    name: Deploy to Production AWS VPS
+    name: Deploy to Current Production VPS
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to VPS with Zero-Downtime Blue/Green Switch
-        uses: appleboy/ssh-action@v1.0.3
+      - uses: actions/checkout@v4
+      - name: Pull built images and restart current VPS application services
+        uses: appleboy/ssh-action@v1.2.0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_ACTOR: ${{ github.actor }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
+          RELEASE_TAG: gha-${{ github.run_id }}-${{ github.run_attempt }}
+          DISPATCH_REPO: ${{ github.event.client_payload.repo }}
+          EVENT_NAME: ${{ github.event_name }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER || 'ubuntu' }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          script_stop: true
           command_timeout: 30m
-          envs: GH_TOKEN,GH_ACTOR
-          script: |
-            echo "=========================================================="
-            echo "?? Starting ATS Zero-Downtime Deployment on AWS VPS"
-            echo "=========================================================="
-
-            APP_DIR="/var/www/ats"
-            mkdir -p "$APP_DIR"
-            cd "$APP_DIR"
-
-            # 1. Trust GitHub host
-            mkdir -p ~/.ssh
-            ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true
-
-            # 2. Sync Orchestrator Repository
-            echo "?? Syncing ATS_DOCKERREPO..."
-            test -d .git || git clone git@github.com:enfycon-inc/ATS_DOCKERREPO.git .
-            git remote set-url origin git@github.com:enfycon-inc/ATS_DOCKERREPO.git || true
-            git fetch origin main || true
-            git reset --hard origin/main
-
-            # 3. Log in to GHCR to pull images
-            echo "?? Logging into GitHub Container Registry..."
-            echo "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
-
-            # 4. Ensure deployment script has execution permissions and run it
-            chmod +x scripts/zero_downtime_deploy.sh
-            bash scripts/zero_downtime_deploy.sh
+          envs: GH_TOKEN,GH_ACTOR,IMAGE_OWNER,RELEASE_TAG,DISPATCH_REPO,EVENT_NAME
+          script_path: deployment/github/deploy-current-vps.sh
