@@ -13,6 +13,15 @@ on:
         description: Test VPS connection without building or deploying
         type: boolean
         default: false
+      service:
+        description: Service to deploy
+        type: choice
+        options: [all, frontend, backend, parser]
+        default: all
+      existing_release:
+        description: Optional existing GHCR release tag (gha-RUN-ATTEMPT); skips rebuilding
+        type: string
+        default: ''
 
 concurrency:
   group: production-deployment
@@ -29,6 +38,9 @@ jobs:
     steps:
       - name: Checkout Orchestrator Code
         uses: actions/checkout@v4
+
+      - name: Test deployment failure and completion handling
+        run: python3 deployment/github/test-deploy.py
 
       - name: Check SSH connection and current installation
         uses: appleboy/ssh-action@v1.2.0
@@ -51,7 +63,7 @@ jobs:
     name: Build & Push ${{ matrix.tag }}
     needs: verify
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && !inputs.check_only
+    if: github.ref == 'refs/heads/main' && !inputs.check_only && !inputs.existing_release
     strategy:
       fail-fast: false
       matrix:
@@ -71,8 +83,16 @@ jobs:
     steps:
       - name: Check if matrix job should run
         id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_REPO: ${{ github.event.client_payload.repo }}
+          MATRIX_REPO: ${{ matrix.repo }}
+          MATRIX_TAG: ${{ matrix.tag }}
+          SERVICE: ${{ inputs.service || 'all' }}
         run: |
-          if [ "${{ github.event_name }}" == "repository_dispatch" ] && [ "${{ github.event.client_payload.repo }}" != "${{ matrix.repo }}" ]; then
+          if [ "$EVENT_NAME" = "repository_dispatch" ] && [ "$DISPATCH_REPO" != "$MATRIX_REPO" ]; then
+            echo "skip=true" >> $GITHUB_ENV
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$SERVICE" != "all" ] && [ "ats-$SERVICE" != "$MATRIX_TAG" ]; then
             echo "skip=true" >> $GITHUB_ENV
           fi
 
@@ -136,7 +156,8 @@ jobs:
 
   deploy:
     name: Deploy to Current Production VPS
-    needs: build
+    needs: [verify, build]
+    if: always() && !cancelled() && needs.verify.result == 'success' && !inputs.check_only && (needs.build.result == 'success' || (inputs.existing_release && needs.build.result == 'skipped'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -146,7 +167,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_ACTOR: ${{ github.actor }}
           IMAGE_OWNER: ${{ github.repository_owner }}
-          RELEASE_TAG: gha-${{ github.run_id }}-${{ github.run_attempt }}
+          RELEASE_TAG: ${{ inputs.existing_release || format('gha-{0}-{1}', github.run_id, github.run_attempt) }}
+          SERVICE: ${{ inputs.service || 'all' }}
           DISPATCH_REPO: ${{ github.event.client_payload.repo }}
           EVENT_NAME: ${{ github.event_name }}
         with:
@@ -155,5 +177,5 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           command_timeout: 30m
-          envs: GH_TOKEN,GH_ACTOR,IMAGE_OWNER,RELEASE_TAG,DISPATCH_REPO,EVENT_NAME
+          envs: GH_TOKEN,GH_ACTOR,IMAGE_OWNER,RELEASE_TAG,DISPATCH_REPO,EVENT_NAME,SERVICE
           script_path: deployment/github/deploy-current-vps.sh

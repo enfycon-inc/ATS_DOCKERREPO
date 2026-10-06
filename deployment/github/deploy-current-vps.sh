@@ -1,5 +1,17 @@
-sudo -n --preserve-env=GH_TOKEN,GH_ACTOR,IMAGE_OWNER,RELEASE_TAG,DISPATCH_REPO,EVENT_NAME bash -se <<'ATS_DEPLOY'
+sudo -n --preserve-env=GH_TOKEN,GH_ACTOR,IMAGE_OWNER,RELEASE_TAG,DISPATCH_REPO,EVENT_NAME,SERVICE bash -se <<'ATS_DEPLOY'
 set -euo pipefail
+deployment_complete=false
+cleanup() {
+  local code=$?
+  trap - EXIT
+  if [[ -n "${DOCKER_CONFIG:-}" ]]; then rm -rf "$DOCKER_CONFIG"; fi
+  if [[ "$code" == 0 && "$deployment_complete" != true ]]; then
+    echo 'Deployment ended before running-image verification completed' >&2
+    code=1
+  fi
+  exit "$code"
+}
+trap cleanup EXIT
 cd /var/www/ats-prod
 test -f compose.yml
 test -f .env
@@ -14,6 +26,12 @@ case "${EVENT_NAME}" in
       enfycon-inc/resume-parser) services=(parser);;
       *) echo 'Unknown service repository'; exit 1;;
     esac;;
+  workflow_dispatch)
+    case "${SERVICE:-all}" in
+      all) services=(frontend backend parser);;
+      frontend|backend|parser) services=("$SERVICE");;
+      *) echo 'Unknown selected service'; exit 1;;
+    esac;;
   *) services=(frontend backend parser);;
 esac
 [[ "$RELEASE_TAG" =~ ^gha-[0-9]+-[0-9]+$ ]]
@@ -21,7 +39,6 @@ esac
 # Keep registry credentials temporary; production secrets remain on the VPS.
 export DOCKER_CONFIG
 DOCKER_CONFIG=$(mktemp -d)
-trap 'rm -rf "$DOCKER_CONFIG"' EXIT
 printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
 unset GH_TOKEN
 for service in "${services[@]}"; do
@@ -33,11 +50,14 @@ done
 if [[ " ${services[*]} " == *' backend '* ]]; then
   container=$(docker compose -f compose.yml ps -q backend)
   test -n "$container"
-  old_schema=$(docker exec "$container" cat /app/prisma/schema.prisma)
-  new_schema=$(docker run --rm --entrypoint cat "ats-backend:prod-${RELEASE_TAG}" /app/prisma/schema.prisma)
+  # Ignore CRLF/LF differences only; keep real schema changes blocked.
+  old_schema=$(docker exec "$container" cat /app/prisma/schema.prisma </dev/null | sed 's/\r$//')
+  new_schema=$(docker run --rm --entrypoint cat "ats-backend:prod-${RELEASE_TAG}" /app/prisma/schema.prisma </dev/null | sed 's/\r$//')
+  [[ -n "$old_schema" && -n "$new_schema" ]] || { echo 'Cannot read Prisma schema'; exit 1; }
   [[ "$old_schema" == "$new_schema" ]] || { echo 'Prisma schema changed: apply a reviewed migration separately'; exit 1; }
 fi
-sh ./backup.sh
+# The script itself arrives on stdin. Backup commands must not consume it.
+sh ./backup.sh </dev/null
 mkdir -p github-releases
 previous="github-releases/${RELEASE_TAG}.env"
 cp .env "$previous"
@@ -55,7 +75,7 @@ wait_healthy() {
       health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container")
       [[ "$state" == running && "$health" != starting && "$health" != unhealthy ]] || ready=false
       if [[ "$service" == parser ]]; then
-        docker compose -f compose.yml exec -T parser python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=4).read()" >/dev/null 2>&1 || ready=false
+        docker compose -f compose.yml exec -T --interactive=false parser python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=4).read()" </dev/null >/dev/null 2>&1 || ready=false
       fi
     done
     if $ready; then return 0; fi
@@ -92,7 +112,17 @@ docker compose -f compose.yml up -d --no-deps "${targets[@]}"
 wait_healthy
 sleep 10
 wait_healthy
-trap - ERR
+for service in "${targets[@]}"; do
+  image_service="$service"
+  [[ "$service" != worker ]] || image_service=parser
+  expected=$(docker image inspect -f '{{.Id}}' "ats-${image_service}:prod-${RELEASE_TAG}")
+  container=$(docker compose -f compose.yml ps -q "$service")
+  actual=$(docker inspect -f '{{.Image}}' "$container")
+  [[ "$actual" == "$expected" ]] || { echo "Running image mismatch: $service"; false; }
+  echo "Verified running image: $service / $expected"
+done
 printf '%s\n' "$RELEASE_TAG" > github-releases/current
+deployment_complete=true
+trap - ERR
 echo "Deployment successful: ${RELEASE_TAG} / ${services[*]}"
 ATS_DEPLOY
