@@ -415,8 +415,20 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
         folder = self.root / 'backups'
         folder.mkdir(mode=0o700, exist_ok=True)
         postgres = self.config['postgres']
+        # Compose containers can be recreated independently of application releases.
+        # Resolve the live database, rather than reusing the initialization-time ID.
+        candidates = self.docker('compose', '-p', self.config['project'], '-f', 'compose.yml',
+                                 'ps', '-q', 'postgres').split()
+        if len(candidates) != 1:
+            raise RuntimeError('Database backup requires exactly one running production PostgreSQL container')
+        database = self.inspect(candidates[0])
+        labels = database.get('Config', {}).get('Labels') or {}
+        if (not database.get('State', {}).get('Running') or
+                labels.get('com.docker.compose.project') != self.config['project'] or
+                labels.get('com.docker.compose.service') != 'postgres'):
+            raise RuntimeError('Database backup target does not match the running production PostgreSQL service')
         backend = self.state['releases'][self.state['current']]['containers']['backend']
-        commands = [('ats-' + stamp + '.dump', ['docker', 'exec', postgres['container'], 'pg_dump', '-U', postgres['user'], '-d', postgres['database'], '-Fc']),
+        commands = [('ats-' + stamp + '.dump', ['docker', 'exec', candidates[0], 'pg_dump', '-U', postgres['user'], '-d', postgres['database'], '-Fc']),
                     ('uploads-' + stamp + '.tar.gz', ['docker', 'exec', backend, 'tar', '-czf', '-', '/app/public', '/app/uploads'])]
         for name, args in commands:
             path = folder / name
@@ -426,7 +438,8 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                 result = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.PIPE, timeout=300)
             if result.returncode:
                 temp.unlink(missing_ok=True)
-                raise RuntimeError('Backup command failed')
+                kind = 'Database' if name.startswith('ats-') else 'Uploads'
+                raise RuntimeError(kind + ' backup command failed (exit ' + str(result.returncode) + ')')
             os.replace(temp, path)
         for path in folder.iterdir():
             if path.is_file() and re.fullmatch(r'(ats-|uploads-)[0-9TZ]+\.(dump|tar\.gz)', path.name) and path.stat().st_mtime < time.time() - 7 * 86400:

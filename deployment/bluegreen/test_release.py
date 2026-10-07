@@ -345,5 +345,42 @@ class Tests(unittest.TestCase):
         self.assertIn('gha-1-1-worker',record['containers']['worker'])
 
 
+class BackupTests(unittest.TestCase):
+    def make_controller(self, root, targets='live-database', labels=None, running=True):
+        controller = object.__new__(release.Controller)
+        controller.root = Path(root)
+        controller.config = {'project': 'production', 'postgres': {'container': 'removed-container', 'user': 'app', 'database': 'app'}}
+        controller.state = {'current': 'live', 'releases': {'live': {'containers': {'backend': 'live-backend'}}}}
+        controller.docker = lambda *args: targets
+        controller.inspect = lambda name: {'State': {'Running': running}, 'Config': {'Labels': labels if labels is not None else {
+            'com.docker.compose.project': 'production', 'com.docker.compose.service': 'postgres'}}}
+        return controller
+
+    def test_backup_uses_recreated_database_instead_of_stale_id(self):
+        with tempfile.TemporaryDirectory() as root:
+            controller = self.make_controller(root)
+            with patch.object(release.subprocess, 'run', return_value=release.subprocess.CompletedProcess([], 0)) as run:
+                controller.backup()
+            self.assertEqual(run.call_args_list[0].args[0][2], 'live-database')
+            self.assertEqual(len(list((Path(root) / 'backups').glob('*.dump'))), 1)
+
+    def test_missing_ambiguous_stopped_or_foreign_database_stops_backup(self):
+        cases = [dict(targets=''), dict(targets='one two'), dict(running=False), dict(labels={
+            'com.docker.compose.project': 'other', 'com.docker.compose.service': 'postgres'})]
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as root:
+                controller = self.make_controller(root, **case)
+                with patch.object(release.subprocess, 'run') as run:
+                    with self.assertRaises(RuntimeError): controller.backup()
+                    run.assert_not_called()
+
+    def test_failed_database_backup_has_stage_and_removes_partial_dump(self):
+        with tempfile.TemporaryDirectory() as root:
+            controller = self.make_controller(root)
+            with patch.object(release.subprocess, 'run', return_value=release.subprocess.CompletedProcess([], 1, stderr=b'sensitive diagnostic')):
+                with self.assertRaisesRegex(RuntimeError, 'Database backup command failed'):
+                    controller.backup()
+            self.assertEqual(list((Path(root) / 'backups').iterdir()), [])
+
 if __name__=='__main__':
     unittest.main()
