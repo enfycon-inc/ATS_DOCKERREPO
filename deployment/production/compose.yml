@@ -10,6 +10,8 @@ services:
   postgres:
     <<: *common
     image: postgres:16-alpine
+    ports:
+      - "5432:5432"
     mem_limit: 384m
     command: [postgres, -c, shared_buffers=128MB, -c, max_connections=60, -c, work_mem=4MB]
     environment:

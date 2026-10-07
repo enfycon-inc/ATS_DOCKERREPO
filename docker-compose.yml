@@ -18,7 +18,7 @@ services:
     env_file:
       - ./resume-parser-main/.env
     environment:
-      - DATABASE_URL=postgresql://ats_user:AtsDevPass2024@13.55.100.200:5432/ats_db
+      - DATABASE_URL=postgresql://ats_user:7ace6e6fbdefccd4aab94133920cc94b347bb6df30539021@13.238.201.190:5432/ats_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
@@ -37,7 +37,7 @@ services:
     env_file:
       - ./resume-parser-main/.env
     environment:
-      - DATABASE_URL=postgresql://ats_user:AtsDevPass2024@13.55.100.200:5432/ats_db
+      - DATABASE_URL=postgresql://ats_user:7ace6e6fbdefccd4aab94133920cc94b347bb6df30539021@13.238.201.190:5432/ats_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
