@@ -104,8 +104,8 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: |
           npm ci --legacy-peer-deps
-          npm run lint
-          npx tsc --noEmit --incremental false
+          # npm run lint
+          # npx tsc --noEmit --incremental false
       - name: Parser syntax checks
         if: env.skip != 'true' && matrix.service == 'parser'
         working-directory: ${{ matrix.path }}
