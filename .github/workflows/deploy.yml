@@ -99,6 +99,9 @@ jobs:
           npx prisma generate
           # npm test -- --runInBand
           npm run build
+      - name: Report pending database cleanup
+        if: env.skip != 'true' && matrix.service == 'backend'
+        run: python3 orchestrator/deployment/bluegreen/check_schema_cleanups.py ats_backend
       - name: Frontend lint and type checks
         if: env.skip != 'true' && matrix.service == 'frontend'
         working-directory: ${{ matrix.path }}
