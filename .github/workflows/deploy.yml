@@ -37,6 +37,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check out backend migration fixtures
+        uses: actions/checkout@v4
+        with:
+          repository: enfycon-inc/ats_backend
+          path: ats_backend
+          ref: ${{ github.event.client_payload.repo == 'enfycon-inc/ats_backend' && github.event.client_payload.ref || 'main' }}
+          token: ${{ secrets.GH_PAT }}
+      - name: Verify migration fixture is available
+        run: test -f ats_backend/prisma/migrations/20261008050000_client_visibility_policy/migration.sql
       - run: python3 deployment/bluegreen/test_release.py
       - run: python3 -m py_compile deployment/bluegreen/release.py
   build:
