@@ -137,6 +137,10 @@ class Tests(unittest.TestCase):
         self.assertEqual(release.canonical_schema('model A {\r\n}\r\n'),release.canonical_schema('model A {\n}\n'))
         self.assertNotEqual(release.canonical_schema('id Int'),release.canonical_schema('id String'))
 
+    def test_client_visibility_migration_passes_release_guard(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261008050000_client_visibility_policy/migration.sql'
+        release.validate_additive_migration(migration.read_text())
+
     def test_additive_migration_requires_review_transaction_and_lock_bound(self):
         prefix="-- ATS: rollback-compatible\nBEGIN;\nSET LOCAL lock_timeout = '5s';\n"
         release.validate_additive_migration(prefix+'ALTER TABLE ats.jobs ADD COLUMN example TEXT;\nCOMMIT;')

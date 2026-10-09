@@ -7,7 +7,13 @@ roughly half the CPU/RAM for future EnfySync. They do not reserve disk I/O
 or network bandwidth. The operating system and Docker also need headroom.
 
 Production directory: `/var/www/ats-prod`. Compose project: `ats-prod`.
-Databases and Redis have no public port mappings. Caddy owns 80/443.
+PostgreSQL publishes 5432 on IPv4/IPv6 following explicit owner authorization on
+7 October 2026. Public connections to ats_db as ats_user require TLS and SCRAM
+password authentication; the internal Docker subnet retains application access.
+Use db.enfyjobs.com with SSL enabled in pgAdmin. Redis has no public port mapping.
+The VPS uses the trusted Caddy certificate for db.enfyjobs.com; renew-db-tls.sh
+and /etc/cron.d/ats-db-tls synchronize renewed certificates every 15 minutes.
+Caddy owns 80/443.
 Future EnfySync must have separate project/volume/network names and proxy
 routes. Never replace this PostgreSQL volume with EnfySync's database.
 

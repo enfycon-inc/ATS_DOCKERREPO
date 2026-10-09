@@ -1117,5 +1117,10 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as exc:
-        print('RELEASE_FAILED: ' + str(exc), file=sys.stderr)
+        # Some subprocess/IO exceptions have an empty string representation. Keep
+        # the failure actionable without printing command arguments or secrets.
+        detail = str(exc).strip() or (type(exc).__name__ + ': ' + repr(exc))
+        print('RELEASE_FAILED: ' + detail, file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         sys.exit(1)
