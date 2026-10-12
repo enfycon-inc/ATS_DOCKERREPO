@@ -153,6 +153,21 @@ class Tests(unittest.TestCase):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261008050000_client_visibility_policy/migration.sql'
         release.validate_additive_migration(migration.read_text())
 
+    def test_account_manager_pod_permission_grant_passes_release_guard(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261012010000_account_manager_assign_pod/migration.sql'
+        release.validate_additive_migration(migration.read_text())
+
+    def test_reviewed_permission_grant_marker_cannot_authorize_other_updates(self):
+        sql = """-- ATS: rollback-compatible
+-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+UPDATE ats.jobs SET title = 'unexpected';
+COMMIT;
+"""
+        with self.assertRaisesRegex(RuntimeError, 'does not match its approved Account Manager pod grant'):
+            release.validate_additive_migration(sql)
+
     def test_additive_migration_requires_review_transaction_and_lock_bound(self):
         prefix="-- ATS: rollback-compatible\nBEGIN;\nSET LOCAL lock_timeout = '5s';\n"
         release.validate_additive_migration(prefix+'ALTER TABLE ats.jobs ADD COLUMN example TEXT;\nCOMMIT;')

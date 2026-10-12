@@ -32,13 +32,50 @@ def migration_checksum_matches(data, expected):
     return any(hashlib.sha256(value).hexdigest() == expected for value in variants)
 
 
+def is_reviewed_account_manager_pod_grant(sql, plain):
+    marker = '-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod'
+    if marker not in sql:
+        return False
+
+    expected = """
+        BEGIN;
+        SET LOCAL lock_timeout = '5s';
+        UPDATE ats.system_roles
+        SET permissions = COALESCE(permissions, '[]'::jsonb) || '[\"job:assign_pod\"]'::jsonb
+        WHERE system_key = 'ACCOUNT_MANAGER'
+          AND NOT COALESCE(permissions, '[]'::jsonb) @> '[\"job:assign_pod\"]'::jsonb;
+        WITH RECURSIVE account_manager_roles(id) AS (
+          SELECT cr.id
+          FROM ats.custom_roles cr
+          JOIN ats.system_roles sr ON sr.id = cr.system_role_id
+          WHERE sr.system_key = 'ACCOUNT_MANAGER'
+          UNION
+          SELECT derived.id
+          FROM ats.custom_roles derived
+          JOIN account_manager_roles base ON derived.base_role_id = base.id
+        )
+        UPDATE ats.custom_roles cr
+        SET permissions = COALESCE(cr.permissions, '[]'::jsonb) || '[\"job:assign_pod\"]'::jsonb
+        FROM account_manager_roles amr
+        WHERE cr.id = amr.id
+          AND NOT COALESCE(cr.permissions, '[]'::jsonb) @> '[\"job:assign_pod\"]'::jsonb;
+        COMMIT;
+    """
+    normalize = lambda value: re.sub(r'\s+', ' ', value).strip().lower()
+    return normalize(plain) == normalize(expected)
+
+
 def validate_additive_migration(sql):
     if '-- ATS: rollback-compatible' not in sql:
         raise RuntimeError('Migration needs an explicit rollback compatibility review')
     plain = re.sub(r'/\*.*?\*/|--[^\n]*', '', sql, flags=re.S)
     # Referential actions are DDL, not data mutations.
     plain = re.sub(r'\bON\s+(DELETE|UPDATE)\s+(CASCADE|RESTRICT|NO\s+ACTION|SET\s+(NULL|DEFAULT))', '', plain, flags=re.I)
-    if re.search(r'\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|RENAME)\b|\bALTER\s+COLUMN\b|\bDISABLE\s+TRIGGER\b', plain, re.I):
+    changes_data = re.search(r'\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|RENAME)\b|\bALTER\s+COLUMN\b|\bDISABLE\s+TRIGGER\b', plain, re.I)
+    reviewed_permission_grant = is_reviewed_account_manager_pod_grant(sql, plain)
+    if '-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod' in sql and not reviewed_permission_grant:
+        raise RuntimeError('Reviewed permission grant does not match its approved Account Manager pod grant')
+    if changes_data and not reviewed_permission_grant:
         raise RuntimeError('Destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError('Migration must be transactional')
