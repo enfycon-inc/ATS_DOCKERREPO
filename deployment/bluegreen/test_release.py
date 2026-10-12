@@ -376,6 +376,36 @@ COMMIT;
         self.assertIn('gha-1-1-worker',record['containers']['worker'])
 
 
+class AdmissionTests(unittest.TestCase):
+    def check(self, current, limit, extra):
+        controller = object.__new__(release.Controller)
+        controller.config = {'resource_group': 'ats.slice'}
+        controller.root = Path('/unused-test-root')
+        def read(path, *args, **kwargs):
+            return str(current if path.name == 'memory.current' else limit)
+        with patch.object(Path, 'read_text', read), patch.object(release.shutil, 'disk_usage') as disk:
+            disk.return_value.free = 4 * 1024**3
+            controller.admission(extra)
+
+    def test_exact_limit_is_admitted(self):
+        mib = 1024**2
+        self.check(1000*mib, 1832*mib, 576*mib)
+
+    def test_shortfall_reports_usage_candidate_reserve_and_limit(self):
+        mib = 1024**2
+        with self.assertRaisesRegex(RuntimeError, 'current=1001.0 MiB, candidate=576.0 MiB, reserve=256.0 MiB, limit=1832.0 MiB, shortfall=1.0 MiB'):
+            self.check(1001*mib, 1832*mib, 576*mib)
+
+    def test_parser_overlap_is_included(self):
+        mib = 1024**2
+        with self.assertRaisesRegex(RuntimeError, 'candidate=1472.0 MiB.*shortfall=896.0 MiB'):
+            self.check(1000*mib, 1832*mib, 1472*mib)
+
+    def test_unbounded_allocation_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, 'memory limit must be configured'):
+            self.check(0, 'max', 0)
+
+
 class BackupTests(unittest.TestCase):
     def make_controller(self, root, targets='live-database', labels=None, running=True):
         controller = object.__new__(release.Controller)

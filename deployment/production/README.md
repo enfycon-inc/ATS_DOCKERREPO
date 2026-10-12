@@ -1,9 +1,11 @@
 # ATS production on 13.238.201.190
 
 The VPS has 2 CPUs and 7.6 GiB RAM. ATS containers run under `ats.slice`:
-CPU quota 100% (one CPU), memory high 3400 MiB, hard maximum 3800 MiB,
-and no swap. Per-container limits total 3776 MiB. These limits reserve
-roughly half the CPU/RAM for future EnfySync. They do not reserve disk I/O
+CPU quota 100% (one CPU), memory high 4096 MiB, hard maximum 4352 MiB,
+and no swap. Per-container limits total 3776 MiB. The memory allocation was
+increased on 2026-10-09 to support blue-green parser overlap plus the 256 MiB
+deployment reserve. It leaves approximately 3.4 GiB outside ATS for the host
+and future EnfySync; half the CPU remains reserved. These limits do not reserve disk I/O
 or network bandwidth. The operating system and Docker also need headroom.
 
 Production directory: `/var/www/ats-prod`. Compose project: `ats-prod`.

@@ -206,8 +206,15 @@ class Controller:
         if limit_text == 'max':
             raise RuntimeError('ATS memory limit must be configured')
         limit = int(limit_text)
-        if current + extra + 256 * 1024**2 > limit:
-            raise RuntimeError('Insufficient ATS memory headroom; active release unchanged')
+        reserve = 256 * 1024**2
+        required = current + extra + reserve
+        if required > limit:
+            mib = 1024**2
+            raise RuntimeError(
+                'Insufficient ATS memory headroom; active release unchanged: '
+                f'current={current / mib:.1f} MiB, candidate={extra / mib:.1f} MiB, '
+                f'reserve={reserve / mib:.1f} MiB, limit={limit / mib:.1f} MiB, '
+                f'shortfall={(required - limit) / mib:.1f} MiB')
         if shutil.disk_usage(self.root).free < 3 * 1024**3:
             raise RuntimeError('Insufficient disk headroom; active release unchanged')
 
