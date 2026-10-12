@@ -25,6 +25,13 @@ def canonical_schema(value):
     return value.replace('\r\n', '\n').rstrip('\n')
 
 
+def migration_checksum_matches(data, expected):
+    # Prisma permits identical SQL with LF or CRLF; preserve all other bytes.
+    lf = data.replace(b'\r\n', b'\n')
+    variants = (data, lf, lf.replace(b'\n', b'\r\n'))
+    return any(hashlib.sha256(value).hexdigest() == expected for value in variants)
+
+
 def validate_additive_migration(sql):
     if '-- ATS: rollback-compatible' not in sql:
         raise RuntimeError('Migration needs an explicit rollback compatibility review')
@@ -291,9 +298,8 @@ class Controller:
             if applied.get(baseline['name']) != baseline['checksum']:
                 raise RuntimeError('Production Prisma baseline does not match the reviewed baseline')
             for name, path in sorted(files.items()):
-                checksum = hashlib.sha256(path.read_bytes()).hexdigest()
                 if name in applied:
-                    if checksum != applied[name]:
+                    if not migration_checksum_matches(path.read_bytes(), applied[name]):
                         raise RuntimeError('An applied migration was changed: ' + name)
                 else:
                     validate_additive_migration(path.read_text())

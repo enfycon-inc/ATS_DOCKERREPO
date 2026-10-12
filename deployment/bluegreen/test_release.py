@@ -13,6 +13,18 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
 
+class MigrationChecksumTests(unittest.TestCase):
+    def test_accepts_only_line_ending_variants(self):
+        lf = b'BEGIN;\nSELECT 1;\nCOMMIT;\n'
+        crlf = lf.replace(b'\n', b'\r\n')
+        for stored in (lf, crlf):
+            checksum = hashlib.sha256(stored).hexdigest()
+            for candidate in (lf, crlf):
+                self.assertTrue(release.migration_checksum_matches(candidate, checksum))
+            self.assertFalse(release.migration_checksum_matches(lf.replace(b'SELECT 1', b'SELECT 2'), checksum))
+            self.assertFalse(release.migration_checksum_matches(lf + b'\n', checksum))
+
+
 class Fake(release.Controller):
     def __init__(self, root):
         self.root = Path(root)
