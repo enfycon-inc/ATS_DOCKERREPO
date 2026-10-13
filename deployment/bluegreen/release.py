@@ -65,22 +65,23 @@ def is_reviewed_account_manager_pod_grant(sql, plain):
     return normalize(plain) == normalize(expected)
 
 
-def validate_additive_migration(sql):
+def validate_additive_migration(sql, migration_name=None):
+    context = f'Migration {migration_name}: ' if migration_name else ''
     if '-- ATS: rollback-compatible' not in sql:
-        raise RuntimeError('Migration needs an explicit rollback compatibility review')
+        raise RuntimeError(context + 'needs an explicit rollback compatibility review (missing -- ATS: rollback-compatible marker)')
     plain = re.sub(r'/\*.*?\*/|--[^\n]*', '', sql, flags=re.S)
     # Referential actions are DDL, not data mutations.
     plain = re.sub(r'\bON\s+(DELETE|UPDATE)\s+(CASCADE|RESTRICT|NO\s+ACTION|SET\s+(NULL|DEFAULT))', '', plain, flags=re.I)
     changes_data = re.search(r'\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|RENAME)\b|\bALTER\s+COLUMN\b|\bDISABLE\s+TRIGGER\b', plain, re.I)
     reviewed_permission_grant = is_reviewed_account_manager_pod_grant(sql, plain)
     if '-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod' in sql and not reviewed_permission_grant:
-        raise RuntimeError('Reviewed permission grant does not match its approved Account Manager pod grant')
+        raise RuntimeError(context + 'reviewed permission grant does not match its approved Account Manager pod grant')
     if changes_data and not reviewed_permission_grant:
-        raise RuntimeError('Destructive/data-changing migration needs separate review; traffic unchanged')
+        raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
-        raise RuntimeError('Migration must be transactional')
+        raise RuntimeError(context + 'must be transactional')
     if not re.search(r"SET\s+LOCAL\s+lock_timeout\s*=\s*'5s'", plain, re.I):
-        raise RuntimeError('Migration must bound lock waits to five seconds')
+        raise RuntimeError(context + 'must bound lock waits to five seconds')
 
 
 def retained_ids(state):
@@ -346,7 +347,7 @@ class Controller:
                     if not migration_checksum_matches(path.read_bytes(), applied[name]):
                         raise RuntimeError('An applied migration was changed: ' + name)
                 else:
-                    validate_additive_migration(path.read_text())
+                    validate_additive_migration(path.read_text(), name)
             values = dict(item.split('=',1) for item in self.config['templates']['backend']['Config']['Env'])
             values.update(CHECKPOINT_DISABLE='1', PRISMA_HIDE_UPDATE_MESSAGE='1')
             env = folder / 'migration.env'

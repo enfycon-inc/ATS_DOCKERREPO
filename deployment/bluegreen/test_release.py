@@ -153,6 +153,20 @@ class Tests(unittest.TestCase):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261008050000_client_visibility_policy/migration.sql'
         release.validate_additive_migration(migration.read_text())
 
+    def test_business_unit_currency_migration_passes_release_guard(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261013030000_business_unit_currency/migration.sql'
+        release.validate_additive_migration(migration.read_text(), migration.parent.name)
+
+    def test_migration_guard_names_the_rejected_migration(self):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r'Migration 20261013030000_business_unit_currency: needs an explicit rollback compatibility review',
+        ):
+            release.validate_additive_migration(
+                "BEGIN;\nSET LOCAL lock_timeout = '5s';\nALTER TABLE ats.business_units ADD COLUMN currency VARCHAR(10);\nCOMMIT;",
+                '20261013030000_business_unit_currency',
+            )
+
     def test_account_manager_pod_permission_grant_passes_release_guard(self):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261012010000_account_manager_assign_pod/migration.sql'
         release.validate_additive_migration(migration.read_text())
