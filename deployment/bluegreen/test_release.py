@@ -25,6 +25,17 @@ class MigrationChecksumTests(unittest.TestCase):
             self.assertFalse(release.migration_checksum_matches(lf + b'\n', checksum))
 
 
+class ReleaseLockTests(unittest.TestCase):
+    def test_release_lock_waits_after_contention(self):
+        with patch.object(release.fcntl, 'flock', side_effect=[BlockingIOError(), None]) as flock, \
+             patch('builtins.print') as output:
+            release.acquire_release_lock(object())
+        self.assertEqual(flock.call_count, 2)
+        self.assertEqual(flock.call_args_list[0].args[1], release.fcntl.LOCK_EX | release.fcntl.LOCK_NB)
+        self.assertEqual(flock.call_args_list[1].args[1], release.fcntl.LOCK_EX)
+        self.assertIn('Waiting for the active production', output.call_args.args[0])
+
+
 class Fake(release.Controller):
     def __init__(self, root):
         self.root = Path(root)
@@ -264,6 +275,32 @@ COMMIT;
         with self.assertRaisesRegex(RuntimeError,'address mismatch'):
             c.switch(target)
         self.assertFalse(any(cmd.startswith('set server') for cmd in runtime['commands']))
+
+    def test_stale_release_records_do_not_exhaust_or_override_router_slots(self):
+        c,target,runtime=self.runtime_router()
+        target.pop('proxy_slot')
+        c.state['pending']='candidate'
+        for slot in range(1,release.ROUTER_SLOT_COUNT):
+            stale_id='stale-'+str(slot)
+            c.state['releases'][stale_id]={
+                'id':stale_id,'proxy_slot':slot,'images':{},'containers':{},'assets':[],'adapters':{}
+            }
+
+        self.assertEqual(c.router_slot(target),'1')
+        configuration=c.router_configuration()
+        self.assertIn('backend backend_0\n  http-reuse safe\n  server app 172.18.0.2:5000',configuration)
+        self.assertIn('backend backend_1\n  http-reuse safe\n  server app 172.18.0.2:5000',configuration)
+        for slot in range(2,release.ROUTER_SLOT_COUNT):
+            self.assertIn(f'backend backend_{slot}\n  http-reuse safe\n  server app 127.0.0.1:5000',configuration)
+        self.assertEqual(runtime['slot'],'0')
+
+    def test_cleanup_warning_reports_sanitized_failure_reason(self):
+        c=self.controller
+        c.docker=lambda *args,**kwargs: (_ for _ in ()).throw(RuntimeError('docker cleanup unavailable'))
+        with patch('builtins.print') as output:
+            c.cleanup()
+        self.assertEqual(c.state['cleanup_error'],'RuntimeError: docker cleanup unavailable')
+        self.assertIn('docker cleanup unavailable',output.call_args.args[0])
 
     def test_interrupted_router_setup_restores_original_journal(self):
         c=self.controller

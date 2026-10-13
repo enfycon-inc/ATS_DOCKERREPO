@@ -19,6 +19,7 @@ import urllib.request
 
 SERVICES = ('frontend', 'backend', 'parser', 'worker')
 PAIR = ('backend', 'frontend')
+ROUTER_SLOT_COUNT = 6
 
 
 def canonical_schema(value):
@@ -102,6 +103,14 @@ def atomic(path, data):
     temp.write_text(json.dumps(data, indent=2) if not isinstance(data, str) else data)
     temp.chmod(0o600)
     os.replace(temp, path)
+
+
+def acquire_release_lock(lock):
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print('Waiting for the active production release, dashboard operation, or backup to finish.', flush=True)
+        fcntl.flock(lock, fcntl.LOCK_EX)
 
 
 class Controller:
@@ -810,8 +819,17 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             self.state['successful'] = [key for key in self.state['successful'] if key in retained]
             self.state['cleanup_error'] = None
         except Exception as exc:
-            self.state['cleanup_error'] = str(exc)
-            print('CLEANUP_WARNING: release healthy but cleanup needs attention')
+            lines = str(exc).strip().splitlines()
+            detail = lines[0][:240] if lines else ''
+            if self.config:
+                for template in self.config['templates'].values():
+                    for item in template['Config']['Env']:
+                        key, _, value = item.partition('=')
+                        if re.search('PASSWORD|SECRET|TOKEN|DATABASE_URL', key, re.I) and len(value) > 3:
+                            detail = detail.replace(value, '[redacted]')
+            error = type(exc).__name__ + (': ' + detail if detail else '')
+            self.state['cleanup_error'] = error
+            print('CLEANUP_WARNING: release remains healthy; cleanup failed (' + error + ')')
         self.save()
 
     def stop_retired(self, obj, service=None):
@@ -948,10 +966,47 @@ try {
         return b''.join(chunks).decode()
 
     def router_slot(self, record):
-        if 'proxy_slot' not in record:
-            occupied = {r['proxy_slot'] for r in self.state['releases'].values() if 'proxy_slot' in r}
-            record['proxy_slot'] = next(n for n in range(6) if n not in occupied)
+        if 'proxy_slot' in record:
+            slot = record['proxy_slot']
+            if not isinstance(slot, int) or slot not in range(ROUTER_SLOT_COUNT):
+                raise RuntimeError('Release has an invalid router slot assignment')
+            return str(slot)
+
+        active_slot = None
+        if self.config.get('router'):
+            try:
+                active = self.router_command('show map /route/active.map')
+                active_slots = [int(parts[2]) for line in active.splitlines()
+                                if len(parts := line.split()) == 3 and parts[1] == 'active' and parts[2].isdigit()]
+            except Exception:
+                raise RuntimeError('Cannot confirm the active router slot; refusing to reuse a slot') from None
+            if len(active_slots) != 1 or active_slots[0] not in range(ROUTER_SLOT_COUNT):
+                raise RuntimeError('Cannot confirm the active router slot; refusing to reuse a slot')
+            active_slot = active_slots[0]
+
+        release_id = record.get('id')
+        if release_id == self.state.get('current') and active_slot is not None:
+            record['proxy_slot'] = active_slot
             self.save()
+            return str(active_slot)
+
+        protected = set(retained_ids(self.state))
+        if self.state.get('pending'):
+            protected.add(self.state['pending'])
+        if release_id:
+            protected.add(release_id)
+        occupied = {r['proxy_slot'] for key, r in self.state['releases'].items()
+                    if key in protected and 'proxy_slot' in r}
+        if active_slot is not None:
+            occupied.add(active_slot)
+        available = next((n for n in range(ROUTER_SLOT_COUNT) if n not in occupied), None)
+        if available is None:
+            raise RuntimeError(
+                f'No safe router slot is available ({len(occupied)} of {ROUTER_SLOT_COUNT} slots are protected); '
+                'active traffic was not changed.'
+            )
+        record['proxy_slot'] = available
+        self.save()
         return str(record['proxy_slot'])
 
     def router_addresses(self, record):
@@ -982,8 +1037,11 @@ frontend backend
   use_backend backend_%[str(active),map(/route/active.map)]
 '''
         rows = {}
-        for record in self.state['releases'].values():
-            if 'proxy_slot' not in record:
+        eligible = set(retained_ids(self.state))
+        if self.state.get('pending'):
+            eligible.add(self.state['pending'])
+        for release_id, record in self.state['releases'].items():
+            if release_id not in eligible or 'proxy_slot' not in record:
                 continue
             try:
                 rows[str(record['proxy_slot'])] = self.router_addresses(record)
@@ -1067,8 +1125,9 @@ frontend backend
         migration = self.home / 'router-migration.json'
         atomic(migration, {'state': original, 'config': old_config})
         try:
-            for record in self.state['releases'].values():
-                self.router_slot(record)
+            slot_ids = list(dict.fromkeys([*retained_ids(self.state), self.state.get('pending')]))
+            for release_id in filter(None, slot_ids):
+                self.router_slot(self.state['releases'][release_id])
             atomic(folder / 'haproxy.cfg', self.router_configuration())
             atomic(folder / 'active.map', 'active ' + self.router_slot(current) + '\n')
             self.docker('pull', 'haproxy:3.2-alpine', timeout=180)
@@ -1128,9 +1187,10 @@ frontend backend
 
 def main():
     root, action = sys.argv[1:3]
-    controller = Controller(root)
     with open(Path(root) / '.dashboard.lock', 'w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        acquire_release_lock(lock)
+        # Read release state only after any concurrent deployment/backup finishes.
+        controller = Controller(root)
         if action == 'status':
             if not controller.state:
                 print('Blue/green not initialized')
