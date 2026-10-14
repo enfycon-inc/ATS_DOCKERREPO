@@ -1,5 +1,11 @@
 # System Design Proposal — Submission update window
 
+## Approved compact revision
+
+The window has no required-round count, interviewer or meeting link. L1 is visible first; completed rounds collapse into editable summaries. Schedule L2 appears after L1 clears, and Schedule L3 after L2 clears. Unavailable rounds are hidden. Date and time share one input. Typing remarks filters authorized stage-specific global/branch templates inline; free text remains supported.
+
+Selection can finish after L1 or L2 clearance. Unstarted later rounds retain their state and are not fabricated as cleared. A recorded reason is required for selection while another interview is scheduled/awaiting feedback, or direct recording of an offer/join without its usual preceding outcome. The reason uses final remarks and is also saved in audit history. A rejected round must be corrected before a positive final outcome. Previous correction/reset, granular permission and concurrency protections remain enforced. No database migration or round-count field is introduced by this revision.
+
 Approved scope: a single ellipsis action opens one window for L1, L2, L3 and the final outcome.
 
 ## Current architecture context
