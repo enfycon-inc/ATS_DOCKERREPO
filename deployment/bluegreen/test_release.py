@@ -182,6 +182,16 @@ class Tests(unittest.TestCase):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261012010000_account_manager_assign_pod/migration.sql'
         release.validate_additive_migration(migration.read_text())
 
+    def test_account_manager_template_repair_passes_release_guard(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261014000000_repair_account_manager_template/migration.sql'
+        release.validate_additive_migration(migration.read_text(), migration.parent.name)
+
+    def test_template_repair_cannot_widen_restricted_roles(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261014000000_repair_account_manager_template/migration.sql'
+        sql = migration.read_text().replace("  AND cr.permissions @> (sr.permissions - 'job:assign_pod')\n", '')
+        with self.assertRaisesRegex(RuntimeError, 'does not match its approved Account Manager pod grant'):
+            release.validate_additive_migration(sql)
+
     def test_reviewed_permission_grant_marker_cannot_authorize_other_updates(self):
         sql = """-- ATS: rollback-compatible
 -- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod

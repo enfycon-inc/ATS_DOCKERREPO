@@ -62,8 +62,22 @@ def is_reviewed_account_manager_pod_grant(sql, plain):
           AND NOT COALESCE(cr.permissions, '[]'::jsonb) @> '[\"job:assign_pod\"]'::jsonb;
         COMMIT;
     """
+    template_repair = """
+        BEGIN;
+        SET LOCAL lock_timeout = '5s';
+        UPDATE ats.custom_roles cr
+        SET permissions = cr.permissions || '["job:assign_pod"]'::jsonb
+        FROM ats.system_roles sr
+        WHERE cr.system_role_id = sr.id
+          AND sr.system_key = 'ACCOUNT_MANAGER'
+          AND sr.permissions @> '["job:assign_pod"]'::jsonb
+          AND NOT cr.permissions @> '["job:assign_pod"]'::jsonb
+          AND cr.permissions @> (sr.permissions - 'job:assign_pod')
+          AND (sr.permissions - 'job:assign_pod') @> cr.permissions;
+        COMMIT;
+    """
     normalize = lambda value: re.sub(r'\s+', ' ', value).strip().lower()
-    return normalize(plain) == normalize(expected)
+    return normalize(plain) in (normalize(expected), normalize(template_repair))
 
 
 def validate_additive_migration(sql, migration_name=None):
