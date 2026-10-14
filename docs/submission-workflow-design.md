@@ -2,6 +2,8 @@
 
 ## Approved compact revision
 
+The table retains Job reference, Account Manager, Recruiter, Candidate, Job created at, Submission date, Pipeline, Current status and Action. Next round is removed in both grouped and flat views. Current status shows its date underneath in smaller muted text: appointment time for Scheduled/Awaiting feedback, recorded status-change time for decisions. Pending and legacy records without reliable history omit the date. History dates are tenant-scoped and fetched once for the visible page; generic submission `updatedAt` is never used as a decision date.
+
 The window has no required-round count, interviewer or meeting link. L1 is visible first; completed rounds collapse into editable summaries. Schedule L2 appears after L1 clears, and Schedule L3 after L2 clears. Unavailable rounds are hidden. Date and time share one input. Typing remarks filters authorized stage-specific global/branch templates inline; free text remains supported.
 
 Selection can finish after L1 or L2 clearance. Unstarted later rounds retain their state and are not fabricated as cleared. A recorded reason is required for selection while another interview is scheduled/awaiting feedback, or direct recording of an offer/join without its usual preceding outcome. The reason uses final remarks and is also saved in audit history. A rejected round must be corrected before a positive final outcome. Previous correction/reset, granular permission and concurrency protections remain enforced. No database migration or round-count field is introduced by this revision.
