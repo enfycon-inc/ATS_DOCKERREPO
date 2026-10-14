@@ -212,6 +212,11 @@ COMMIT;
                     prefix.replace("SET LOCAL lock_timeout = '5s';",'')+'SELECT 1; COMMIT;']:
             with self.assertRaises(RuntimeError):release.validate_additive_migration(sql)
 
+    def test_submission_ownership_marker_cannot_approve_arbitrary_writes(self):
+        sql = "-- ATS: rollback-compatible\n-- ATS: reviewed-submission-role-ownership\nBEGIN;\nSET LOCAL lock_timeout = '5s';\nUPDATE ats.custom_roles SET permissions = '[\"*\"]'::jsonb;\nCOMMIT;\n"
+        with self.assertRaisesRegex(RuntimeError, 'differs from the approved'):
+            release.validate_additive_migration(sql)
+
     def test_unlabeled_legacy_image_is_supported(self):
         self.controller.docker=lambda *args,**kw: json.dumps([{'Id':'legacy','RepoDigests':[],'Config':{'Labels':None}}])
         self.assertIsNone(release.Controller.image(self.controller,'legacy')['revision'])

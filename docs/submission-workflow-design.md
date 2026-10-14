@@ -33,6 +33,12 @@ The submissions API owns permissions, tenant/branch visibility, optimistic concu
 
 ## Deployment
 
+### Approved responsibility policy
+
+Recruiter role bundles, including derived custom bundles, retain submission creation and viewing but lose submission maintenance, scheduling, result, final-outcome, review and rate-edit permissions. Account Manager bundles receive scheduling, all round audits, final outcomes and submission remarks. Existing administrative capabilities and the configured internal-review process remain available. A user explicitly switching to a separately assigned management role uses that selected role's permissions; the API does not combine inactive roles.
+
+`20261015020000_submission_role_ownership` reconciles existing role bundles transactionally. Local/bootstrap initialization applies the same policy. Production skips bootstrap and therefore requires the migration. Request authentication already reloads the active role's current database permissions on every request, so no stale JWT permission grant overrides a migration removal. The read-only window explains responsibility and omits Save. The deployment controller allows the exact reviewed migration checksum only, rejecting modified or forged ownership markers.
+
 Apply `ats_backend/prisma/migrations/20261015010000_submission_round_states/migration.sql`, then deploy the backend and frontend together. No production data was changed during implementation. The migration does not rewrite existing statuses or historical events. Older application versions do not understand the added workflow states; rolling back requires accounting for records written with those states and the history protection triggers.
 
 ## Verification

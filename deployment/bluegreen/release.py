@@ -89,9 +89,15 @@ def validate_additive_migration(sql, migration_name=None):
     plain = re.sub(r'\bON\s+(DELETE|UPDATE)\s+(CASCADE|RESTRICT|NO\s+ACTION|SET\s+(NULL|DEFAULT))', '', plain, flags=re.I)
     changes_data = re.search(r'\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|RENAME)\b|\bALTER\s+COLUMN\b|\bDISABLE\s+TRIGGER\b', plain, re.I)
     reviewed_permission_grant = is_reviewed_account_manager_pod_grant(sql, plain)
+    # User-approved submission ownership reconciliation. Accept this exact
+    # migration only; the marker cannot authorize unrelated permission writes.
+    ownership_marker = '-- ATS: reviewed-submission-role-ownership'
+    reviewed_ownership = ownership_marker in sql and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest() == 'b13ccd1474da99f17cef3224b7fe09ef6adc039466f0052fa5f9ba2a0875ea1a'
+    if ownership_marker in sql and not reviewed_ownership:
+        raise RuntimeError(context + 'submission ownership migration differs from the approved permission changes')
     if '-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod' in sql and not reviewed_permission_grant:
         raise RuntimeError(context + 'reviewed permission grant does not match its approved Account Manager pod grant')
-    if changes_data and not reviewed_permission_grant:
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
