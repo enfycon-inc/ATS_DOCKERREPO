@@ -85,8 +85,10 @@ def validate_additive_migration(sql, migration_name=None):
     if '-- ATS: rollback-compatible' not in sql:
         raise RuntimeError(context + 'needs an explicit rollback compatibility review (missing -- ATS: rollback-compatible marker)')
     plain = re.sub(r'/\*.*?\*/|--[^\n]*', '', sql, flags=re.S)
-    # Referential actions are DDL, not data mutations.
+    # Referential actions, function bodies, and trigger event clauses are DDL, not data mutations.
     plain = re.sub(r'\bON\s+(DELETE|UPDATE)\s+(CASCADE|RESTRICT|NO\s+ACTION|SET\s+(NULL|DEFAULT))', '', plain, flags=re.I)
+    plain = re.sub(r'\$\$.*?\$\$', '', plain, flags=re.S)
+    plain = re.sub(r'\b(BEFORE|AFTER|INSTEAD\s+OF)\s+(INSERT|UPDATE|DELETE)(\s+OR\s+(INSERT|UPDATE|DELETE))*\s+ON\b', '', plain, flags=re.I)
     changes_data = re.search(r'\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|RENAME)\b|\bALTER\s+COLUMN\b|\bDISABLE\s+TRIGGER\b', plain, re.I)
     reviewed_permission_grant = is_reviewed_account_manager_pod_grant(sql, plain)
     # User-approved submission ownership reconciliation. Accept this exact

@@ -2,6 +2,8 @@
 
 ## Approved history presentation
 
+Reference B alignment: bounded table width, candidate/job subtitle, larger readable row text, semantic document/calendar/check icons, and newest event expanded by default. Expanded details use a pale blue panel with labelled Status and Reason lines, rather than a nested before/after table. Prior/new state appears only in details. Changed by always includes avatar (initials fallback), recorded actor name and email (explicit missing-email label when unavailable). New event JSON snapshots the authenticated email; legacy identities are resolved in one tenant-scoped batch by exact actor UUID, never by name. Current profile avatars are presentation metadata, not historical snapshots. No schema migration is required.
+
 Submission history uses one audit table: When, Activity, Changed by, and an accessible expand control. The layout selector, horizontal journey and timeline styles are removed. Every row displays its full date and 12-hour time including seconds; the section header names the timezone. Newest-first API ordering and pagination are retained. Human-readable activity names describe scheduling, rescheduling, clearance, final decisions and corrections. Expanding an event reveals every stored before/after field, snapshot, correction/bypass reason and saved assessment. The view does not deduplicate away identical field values from different fields. No API or database change is required.
 
 ## Approved compact revision
