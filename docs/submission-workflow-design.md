@@ -1,5 +1,9 @@
 # System Design Proposal — Submission update window
 
+## Approved history presentation
+
+Submission history uses one audit table: When, Activity, Changed by, and an accessible expand control. The layout selector, horizontal journey and timeline styles are removed. Every row displays its full date and 12-hour time including seconds; the section header names the timezone. Newest-first API ordering and pagination are retained. Human-readable activity names describe scheduling, rescheduling, clearance, final decisions and corrections. Expanding an event reveals every stored before/after field, snapshot, correction/bypass reason and saved assessment. The view does not deduplicate away identical field values from different fields. No API or database change is required.
+
 ## Approved compact revision
 
 The table retains Job reference, Account Manager, Recruiter, Candidate, Job created at, Submission date, Pipeline, Current status and Action. Next round is removed in both grouped and flat views. Current status shows its date underneath in smaller muted text: appointment time for Scheduled/Awaiting feedback, recorded status-change time for decisions. Pending and legacy records without reliable history omit the date. History dates are tenant-scoped and fetched once for the visible page; generic submission `updatedAt` is never used as a decision date.
