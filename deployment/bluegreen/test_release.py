@@ -221,6 +221,32 @@ COMMIT;
         with self.assertRaisesRegex(RuntimeError, 'differs from the approved'):
             release.validate_additive_migration(sql)
 
+    def test_pod_lead_grant_accepts_only_reviewed_identity_and_content(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261015030000_pod_lead_assignment_grant/migration.sql'
+        sql = migration.read_text().replace('\r\n', '\n')
+        for reviewed in (sql, sql.replace('\n', '\r\n')):
+            release.validate_additive_migration(reviewed, migration.parent.name)
+        for name in (None, 'another_migration'):
+            with self.assertRaisesRegex(RuntimeError, 'data-changing migration needs separate review'):
+                release.validate_additive_migration(sql, name)
+
+    def test_pod_lead_grant_rejects_broadened_or_extra_changes(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261015030000_pod_lead_assignment_grant/migration.sql'
+        sql = migration.read_text()
+        altered = (
+            sql.replace('AND cr.is_system = true', ''),
+            sql.replace("sr.system_key = 'POD_LEAD'", "sr.system_key IN ('POD_LEAD', 'RECRUITER')"),
+            sql.replace('["job:assign_recruiter"]', '["job:assign_recruiter","*"]'),
+            sql.replace('COMMIT;', "UPDATE ats.jobs SET title = 'unexpected';\nCOMMIT;"),
+            sql.replace('-- ATS: rollback-compatible', ''),
+            sql.replace("SET LOCAL lock_timeout = '5s';", ''),
+            sql.replace('BEGIN;', ''),
+        )
+        for changed in altered:
+            self.assertNotEqual(sql, changed)
+            with self.assertRaises(RuntimeError):
+                release.validate_additive_migration(changed, migration.parent.name)
+
     def test_unlabeled_legacy_image_is_supported(self):
         self.controller.docker=lambda *args,**kw: json.dumps([{'Id':'legacy','RepoDigests':[],'Config':{'Labels':None}}])
         self.assertIsNone(release.Controller.image(self.controller,'legacy')['revision'])

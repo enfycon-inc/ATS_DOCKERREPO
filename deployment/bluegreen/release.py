@@ -99,7 +99,17 @@ def validate_additive_migration(sql, migration_name=None):
         raise RuntimeError(context + 'submission ownership migration differs from the approved permission changes')
     if '-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod' in sql and not reviewed_permission_grant:
         raise RuntimeError(context + 'reviewed permission grant does not match its approved Account Manager pod grant')
-    if changes_data and not (reviewed_permission_grant or reviewed_ownership):
+    # Approved one-time Pod Lead grant and its audit receipts. Bind approval to
+    # both the migration identity and exact content; do not allow general RBAC writes.
+    pod_lead_migration = '20261015030000_pod_lead_assignment_grant'
+    reviewed_pod_lead = (
+        migration_name == pod_lead_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == '02293f337df6f06743b5ef7f40fe4b154dbfe485aa6cd5af957c7f0788fac151'
+    )
+    if migration_name == pod_lead_migration and not reviewed_pod_lead:
+        raise RuntimeError(context + 'Pod Lead grant differs from the approved permission changes')
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
