@@ -19,6 +19,7 @@ Thumbs.db
 !.env.example
 
 # Testing scripts and queries
+/output
 testing_scripts/
 memory/
 /scripts
@@ -26,4 +27,5 @@ memory/
 /testing_scripts
 /Diagnostic
 /deployment
-.temp-release-tests
+.tmp-release-tests
+/docs/
