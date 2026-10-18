@@ -190,6 +190,10 @@ class Tests(unittest.TestCase):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261015010000_submission_round_states/migration.sql'
         release.validate_additive_migration(migration.read_text(), migration.parent.name)
 
+    def test_session_revocations_migration_passes_release_guard(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261018120000_session_revocations/migration.sql'
+        release.validate_additive_migration(migration.read_text(), migration.parent.name)
+
     def test_template_repair_cannot_widen_restricted_roles(self):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261014000000_repair_account_manager_template/migration.sql'
         sql = migration.read_text().replace("  AND cr.permissions @> (sr.permissions - 'job:assign_pod')\n", '')

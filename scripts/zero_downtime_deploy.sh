@@ -80,7 +80,7 @@ done
 
 # 3. Pull Pre-built Target Slot Docker images
 echo "?? Pulling pre-built Target [${TARGET_COLOR^^}] Docker containers from GHCR..."
-docker compose -f docker-compose.prod.yml pull "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}"
+docker compose -f docker-compose.prod.yml pull "backend_${TARGET_COLOR}" "frontend_${TARGET_COLOR}" migrate
 
 # 4. Launch Target Slot containers
 echo "?? Starting Target [${TARGET_COLOR^^}] containers..."

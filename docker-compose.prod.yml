@@ -100,6 +100,20 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  # Apply reviewed schema migrations before either backend slot starts.
+  migrate:
+    image: ghcr.io/enfycon-inc/ats-backend:latest
+    restart: "no"
+    entrypoint: ["/app/node_modules/.bin/prisma"]
+    command: ["migrate", "deploy", "--schema", "/app/prisma/schema.prisma"]
+    environment:
+      - DATABASE_URL=postgresql://ats_user:${POSTGRES_PASSWORD:-AtsDevPass2024}@postgres:5432/ats_db?schema=ats&options=-csearch_path%3Dats,mass_mail,public
+      - CHECKPOINT_DISABLE=1
+      - PRISMA_HIDE_UPDATE_MESSAGE=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # ─── 3. Blue Stack: NestJS Core API Backend Server ────────────────
   backend_blue:
     image: ghcr.io/enfycon-inc/ats-backend:latest
@@ -140,6 +154,8 @@ services:
         condition: service_started
       api:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 4s
@@ -239,6 +255,8 @@ services:
         condition: service_started
       api:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:5000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 4s

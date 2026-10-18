@@ -15,9 +15,11 @@ if [ -d ".git" ]; then
     git pull origin main
 fi
 
-# 2. Build and launch containers
-echo "🐳 Launching production containers with Caddy SSL..."
-docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+# 2. Pull the backend image used by the migration job, then launch the stack.
+# Backend slots depend on the one-shot migration service completing successfully.
+echo "🐳 Pulling backend images and launching production containers..."
+docker compose -f docker-compose.prod.yml pull backend_blue backend_green migrate
+docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
 # 3. Clean old images
 echo "🧹 Pruning dangling docker build cache..."
