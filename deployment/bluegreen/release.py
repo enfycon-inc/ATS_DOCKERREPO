@@ -80,6 +80,39 @@ def is_reviewed_account_manager_pod_grant(sql, plain):
     return normalize(plain) in (normalize(expected), normalize(template_repair))
 
 
+def is_reviewed_account_manager_job_creation_grant(sql, plain):
+    marker = '-- ATS: permission-grant ACCOUNT_MANAGER job:grant_creation_delegate'
+    if marker not in sql:
+        return False
+
+    expected = """
+        BEGIN;
+        SET LOCAL lock_timeout = '5s';
+        UPDATE ats.system_roles
+        SET permissions = COALESCE(permissions, '[]'::jsonb) || '[\"job:grant_creation_delegate\"]'::jsonb
+        WHERE system_key = 'ACCOUNT_MANAGER'
+          AND NOT (COALESCE(permissions, '[]'::jsonb) ? 'job:grant_creation_delegate');
+        WITH RECURSIVE account_manager_roles(id) AS (
+          SELECT cr.id
+          FROM ats.custom_roles cr
+          JOIN ats.system_roles sr ON sr.id = cr.system_role_id
+          WHERE sr.system_key = 'ACCOUNT_MANAGER'
+          UNION
+          SELECT derived.id
+          FROM ats.custom_roles derived
+          JOIN account_manager_roles base ON derived.base_role_id = base.id
+        )
+        UPDATE ats.custom_roles cr
+        SET permissions = COALESCE(cr.permissions, '[]'::jsonb) || '[\"job:grant_creation_delegate\"]'::jsonb
+        FROM account_manager_roles amr
+        WHERE cr.id = amr.id
+          AND NOT (COALESCE(cr.permissions, '[]'::jsonb) ? 'job:grant_creation_delegate');
+        COMMIT;
+    """
+    normalize = lambda value: re.sub(r'\s+', ' ', value).strip().lower()
+    return normalize(plain) == normalize(expected)
+
+
 def validate_additive_migration(sql, migration_name=None):
     context = f'Migration {migration_name}: ' if migration_name else ''
     if '-- ATS: rollback-compatible' not in sql:
@@ -90,15 +123,19 @@ def validate_additive_migration(sql, migration_name=None):
     plain = re.sub(r'\$\$.*?\$\$', '', plain, flags=re.S)
     plain = re.sub(r'\b(BEFORE|AFTER|INSTEAD\s+OF)\s+(INSERT|UPDATE|DELETE)(\s+OR\s+(INSERT|UPDATE|DELETE))*\s+ON\b', '', plain, flags=re.I)
     changes_data = re.search(r'\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT|RENAME)\b|\bALTER\s+COLUMN\b|\bDISABLE\s+TRIGGER\b', plain, re.I)
-    reviewed_permission_grant = is_reviewed_account_manager_pod_grant(sql, plain)
+    reviewed_pod_permission_grant = is_reviewed_account_manager_pod_grant(sql, plain)
+    reviewed_job_creation_permission_grant = is_reviewed_account_manager_job_creation_grant(sql, plain)
+    reviewed_permission_grant = reviewed_pod_permission_grant or reviewed_job_creation_permission_grant
     # User-approved submission ownership reconciliation. Accept this exact
     # migration only; the marker cannot authorize unrelated permission writes.
     ownership_marker = '-- ATS: reviewed-submission-role-ownership'
     reviewed_ownership = ownership_marker in sql and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest() == 'b13ccd1474da99f17cef3224b7fe09ef6adc039466f0052fa5f9ba2a0875ea1a'
     if ownership_marker in sql and not reviewed_ownership:
         raise RuntimeError(context + 'submission ownership migration differs from the approved permission changes')
-    if '-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod' in sql and not reviewed_permission_grant:
+    if '-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod' in sql and not reviewed_pod_permission_grant:
         raise RuntimeError(context + 'reviewed permission grant does not match its approved Account Manager pod grant')
+    if '-- ATS: permission-grant ACCOUNT_MANAGER job:grant_creation_delegate' in sql and not reviewed_job_creation_permission_grant:
+        raise RuntimeError(context + 'reviewed permission grant does not match its approved Account Manager job creation access grant')
     # Approved one-time Pod Lead grant and its audit receipts. Bind approval to
     # both the migration identity and exact content; do not allow general RBAC writes.
     pod_lead_migration = '20261015030000_pod_lead_assignment_grant'

@@ -182,6 +182,21 @@ class Tests(unittest.TestCase):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261012010000_account_manager_assign_pod/migration.sql'
         release.validate_additive_migration(migration.read_text())
 
+    def test_account_manager_job_creation_permission_grant_passes_release_guard(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261021010000_account_manager_job_creation_delegate/migration.sql'
+        release.validate_additive_migration(migration.read_text(), migration.parent.name)
+
+    def test_account_manager_job_creation_grant_marker_cannot_authorize_other_updates(self):
+        sql = """-- ATS: rollback-compatible
+-- ATS: permission-grant ACCOUNT_MANAGER job:grant_creation_delegate
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+UPDATE ats.jobs SET title = 'unexpected';
+COMMIT;
+"""
+        with self.assertRaisesRegex(RuntimeError, 'does not match its approved Account Manager job creation access grant'):
+            release.validate_additive_migration(sql)
+
     def test_account_manager_template_repair_passes_release_guard(self):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261014000000_repair_account_manager_template/migration.sql'
         release.validate_additive_migration(migration.read_text(), migration.parent.name)
