@@ -194,6 +194,17 @@ class Tests(unittest.TestCase):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261021050000_delivery_head_assignment_reason_optional/migration.sql'
         release.validate_additive_migration(migration.read_text(), migration.parent.name)
 
+    def test_restricted_developer_login_migration_passes_release_guard(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261021060000_restricted_developer_login/migration.sql'
+        sql = migration.read_text()
+        release.validate_additive_migration(sql, migration.parent.name)
+        with self.assertRaisesRegex(RuntimeError, 'missing -- ATS: rollback-compatible marker'):
+            release.validate_additive_migration(sql.replace('-- ATS: rollback-compatible', ''), migration.parent.name)
+        with self.assertRaisesRegex(RuntimeError, 'must be transactional'):
+            release.validate_additive_migration(sql.replace('COMMIT;', ''), migration.parent.name)
+        with self.assertRaisesRegex(RuntimeError, 'must bound lock waits'):
+            release.validate_additive_migration(sql.replace("SET LOCAL lock_timeout = '5s';", ''), migration.parent.name)
+
     def test_delivery_head_assignment_reason_grant_marker_cannot_authorize_other_updates(self):
         sql = """-- ATS: rollback-compatible
 -- ATS: permission-grant DELIVERY_HEAD job:assignment_reason_optional
