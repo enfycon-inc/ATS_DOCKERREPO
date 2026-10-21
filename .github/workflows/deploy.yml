@@ -163,6 +163,9 @@ jobs:
           labels: org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
           build-args: |
             NEXT_PUBLIC_API_URL=https://api.enfyjobs.com
+            NEXT_PUBLIC_APP_NAME=${{ vars.NEXT_PUBLIC_APP_NAME }}
+            NEXT_PUBLIC_COMPANY_NAME=${{ vars.NEXT_PUBLIC_COMPANY_NAME }}
+            NEXT_PUBLIC_COMPANY_WEBSITE=${{ vars.NEXT_PUBLIC_COMPANY_WEBSITE }}
             NEXT_DEPLOYMENT_ID=${{ steps.source.outputs.revision }}
           cache-from: type=gha,scope=${{ matrix.tag }}
           cache-to: type=gha,mode=max,scope=${{ matrix.tag }}
