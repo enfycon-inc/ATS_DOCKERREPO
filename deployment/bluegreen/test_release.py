@@ -190,6 +190,21 @@ class Tests(unittest.TestCase):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261021040000_delivery_head_job_creation_access/migration.sql'
         release.validate_additive_migration(migration.read_text(), migration.parent.name)
 
+    def test_delivery_head_assignment_reason_grant_passes_release_guard(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261021050000_delivery_head_assignment_reason_optional/migration.sql'
+        release.validate_additive_migration(migration.read_text(), migration.parent.name)
+
+    def test_delivery_head_assignment_reason_grant_marker_cannot_authorize_other_updates(self):
+        sql = """-- ATS: rollback-compatible
+-- ATS: permission-grant DELIVERY_HEAD job:assignment_reason_optional
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+UPDATE ats.jobs SET title = 'unexpected';
+COMMIT;
+"""
+        with self.assertRaisesRegex(RuntimeError, 'does not match its approved Delivery Head assignment reason grant'):
+            release.validate_additive_migration(sql)
+
     def test_delivery_head_job_creation_grant_marker_cannot_authorize_other_updates(self):
         sql = """-- ATS: rollback-compatible
 -- ATS: permission-grant DELIVERY_HEAD job:manage_creation_access
