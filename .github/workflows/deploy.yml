@@ -46,6 +46,12 @@ jobs:
           token: ${{ secrets.GH_PAT }}
       - name: Verify migration fixture is available
         run: test -f ats_backend/prisma/migrations/20261008050000_client_visibility_policy/migration.sql
+      - name: Verify Delivery Head assignment migration fixture is available
+        run: |
+          test -f ats_backend/prisma/migrations/20261021050000_delivery_head_assignment_reason_optional/migration.sql || {
+            echo '::error::Backend migration fixture 20261021050000_delivery_head_assignment_reason_optional is missing from the checked-out ref.'
+            exit 1
+          }
       - run: python3 deployment/bluegreen/test_release.py
       - run: python3 -m py_compile deployment/bluegreen/release.py
   build:
