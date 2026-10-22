@@ -307,6 +307,29 @@ COMMIT;
             with self.assertRaises(RuntimeError):
                 release.validate_additive_migration(changed, migration.parent.name)
 
+    def test_restricted_assigned_pod_deletion_accepts_only_reviewed_identity_and_content(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261022130000_restrict_assigned_pod_deletion/migration.sql'
+        sql = migration.read_text().replace('\r\n', '\n')
+        for reviewed in (sql, sql.replace('\n', '\r\n')):
+            release.validate_additive_migration(reviewed, migration.parent.name)
+        for name in (None, 'another_migration'):
+            with self.assertRaisesRegex(RuntimeError, 'data-changing migration needs separate review'):
+                release.validate_additive_migration(sql, name)
+
+    def test_restricted_assigned_pod_deletion_rejects_modified_sql(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261022130000_restrict_assigned_pod_deletion/migration.sql'
+        sql = migration.read_text()
+        changed = (
+            sql.replace('ON DELETE RESTRICT', 'ON DELETE CASCADE'),
+            sql.replace('SET LOCAL lock_timeout = \'5s\';', ''),
+            sql.replace('COMMIT;', "UPDATE ats.pods SET name = 'unexpected';\nCOMMIT;"),
+            sql.replace('-- ATS: rollback-compatible', ''),
+        )
+        for altered in changed:
+            with self.subTest(altered=altered):
+                with self.assertRaises(RuntimeError):
+                    release.validate_additive_migration(altered, migration.parent.name)
+
     def test_unlabeled_legacy_image_is_supported(self):
         self.controller.docker=lambda *args,**kw: json.dumps([{'Id':'legacy','RepoDigests':[],'Config':{'Labels':None}}])
         self.assertIsNone(release.Controller.image(self.controller,'legacy')['revision'])

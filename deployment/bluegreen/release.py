@@ -223,7 +223,17 @@ def validate_additive_migration(sql, migration_name=None):
     )
     if migration_name == pod_lead_migration and not reviewed_pod_lead:
         raise RuntimeError(context + 'Pod Lead grant differs from the approved permission changes')
-    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead):
+    # Reviewed FK behavior change: retain job_pods rows when a pod is deleted.
+    # Bind the exception to this migration identity and exact normalized SQL.
+    restricted_pod_deletion_migration = '20261022130000_restrict_assigned_pod_deletion'
+    reviewed_restricted_pod_deletion = (
+        migration_name == restricted_pod_deletion_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == 'c496800c396544527bda6393ecad94b5fdd821b9f808b0ee30d1d4a92597fcae'
+    )
+    if migration_name == restricted_pod_deletion_migration and not reviewed_restricted_pod_deletion:
+        raise RuntimeError(context + 'assigned-pod deletion migration differs from the approved foreign-key restriction')
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
