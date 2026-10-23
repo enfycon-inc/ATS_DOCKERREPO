@@ -307,6 +307,49 @@ COMMIT;
             with self.assertRaises(RuntimeError):
                 release.validate_additive_migration(changed, migration.parent.name)
 
+    def test_submission_resume_grant_accepts_only_reviewed_identity_and_content(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261023090000_submission_resume_download/migration.sql'
+        sql = migration.read_text().replace('\r\n', '\n')
+        for reviewed in (sql, sql.replace('\n', '\r\n')):
+            with self.subTest(line_endings='CRLF' if '\r\n' in reviewed else 'LF'):
+                release.validate_additive_migration(reviewed, migration.parent.name)
+        for name in (None, 'another_migration'):
+            with self.subTest(name=name), self.assertRaisesRegex(RuntimeError, 'submission resume grant differs from the approved'):
+                release.validate_additive_migration(sql, name)
+
+    def test_submission_resume_grant_rejects_broadened_or_extra_changes(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261023090000_submission_resume_download/migration.sql'
+        sql = migration.read_text()
+        altered = (
+            sql.replace('["submission:download_resume"]', '["submission:download_resume","*"]'),
+            sql.replace("system_key = 'ACCOUNT_MANAGER'", "system_key IN ('ACCOUNT_MANAGER', 'RECRUITER')"),
+            sql.replace('AND derived.tenant_id = base.tenant_id', ''),
+            sql.replace('AND cr.tenant_id = am.tenant_id', ''),
+            sql.replace("  AND NOT EXISTS (SELECT 1 FROM ats.system_roles sr WHERE sr.id = cr.system_role_id AND sr.system_key = 'RECRUITER')", ''),
+            sql.replace('COMMIT;', "UPDATE ats.jobs SET title = 'unexpected';\nCOMMIT;"),
+            sql + '\nUPDATE ats.custom_roles SET permissions = \'["*"]\'::jsonb;',
+            sql.replace('-- ATS: permission-grant ACCOUNT_MANAGER submission:download_resume', ''),
+            sql.replace('-- ATS: rollback-compatible', ''),
+            sql.replace("SET LOCAL lock_timeout = '5s';", ''),
+            sql.replace('BEGIN;', ''),
+            sql.replace('COMMIT;', ''),
+        )
+        for changed in altered:
+            self.assertNotEqual(sql, changed)
+            with self.subTest(sql=changed), self.assertRaises(RuntimeError):
+                release.validate_additive_migration(changed, migration.parent.name)
+
+    def test_submission_resume_grant_marker_cannot_authorize_other_updates(self):
+        sql = """-- ATS: rollback-compatible
+-- ATS: permission-grant ACCOUNT_MANAGER submission:download_resume
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+UPDATE ats.jobs SET title = 'unexpected';
+COMMIT;
+"""
+        with self.assertRaisesRegex(RuntimeError, 'submission resume grant differs from the approved'):
+            release.validate_additive_migration(sql)
+
     def test_restricted_assigned_pod_deletion_accepts_only_reviewed_identity_and_content(self):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261022130000_restrict_assigned_pod_deletion/migration.sql'
         sql = migration.read_text().replace('\r\n', '\n')

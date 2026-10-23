@@ -233,7 +233,19 @@ def validate_additive_migration(sql, migration_name=None):
     )
     if migration_name == restricted_pod_deletion_migration and not reviewed_restricted_pod_deletion:
         raise RuntimeError(context + 'assigned-pod deletion migration differs from the approved foreign-key restriction')
-    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion):
+    # Reviewed client-handoff capability for Account Manager bundles only.
+    # Require the exact migration identity and content; its marker alone cannot
+    # authorize role changes or removal of the tenant/recruiter restrictions.
+    submission_resume_migration = '20261023090000_submission_resume_download'
+    submission_resume_marker = '-- ATS: permission-grant ACCOUNT_MANAGER submission:download_resume'
+    reviewed_submission_resume = (
+        migration_name == submission_resume_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == 'c7f87321f58cca0f062b4f37047e23801b4a3aba741990ad8d1544eb142527be'
+    )
+    if (migration_name == submission_resume_migration or submission_resume_marker in sql) and not reviewed_submission_resume:
+        raise RuntimeError(context + 'submission resume grant differs from the approved permission changes')
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
