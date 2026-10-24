@@ -9,6 +9,7 @@ This document serves as the **Information Architecture (IA) & Codebase Map** for
 ```mermaid
 graph TD
     Client[Next.js Frontend: Port 3000] -->|HTTP Requests / atsApi| Backend[NestJS Backend: Port 5000]
+    CareerSite[Tenant Career Site Server] -->|Scoped expiring API key: public job reads and application intake| Backend
     Backend -->|JWT Auth, RBAC, CRUD| Postgres[(Supabase PostgreSQL)]
     Backend -->|HTTP /parse-jd| FastAPI[FastAPI Parser: Port 8000]
     FastAPI -->|Celery Task Queue| Redis[Redis Queue: Port 6379]
@@ -101,7 +102,14 @@ graph TD
 
 ---
 
-## 4. Multi-Tenant Email & Custom Domain Architecture
+## 4. Tenant Public Jobs API
+- `ats_backend/src/public-jobs/` provides the career-site API and API-key lifecycle endpoints. Tenant admins issue expiring keys scoped to tenant, branch, or business unit. The database stores SHA-256 key hashes; raw secrets are returned once. Revocation/expiry/tenant-active state is checked on every request.
+- `GET /api/public/jobs` and `GET /api/public/jobs/:slug` return only explicitly published, active, approved, non-deleted jobs in the key scope, using a public-field allowlist. The key cannot call internal job modification or deletion routes.
+- `POST /api/public/jobs/:slug/applications` requires consented PDF/DOCX applications plus total/relevant experience, current company and location, preferred locations, notice period, and both Current CTC and Expected CTC. It stores the resume privately and creates a `PENDING_APPROVAL` submission with backend-controlled source `Company Website` and recruiter marker `WEBSITE_APPLICANT`; applicant remarks are not accepted. Duplicate tenant/job/email applications return the existing reference.
+- ATS users with `submission:internal_screening` see website applications in their assigned branch/unit queue; tenant/branch/unit administrative scopes remain enforced by submission query logic. Recruiter display resolves website entries to “Website Applicant”. Applications and resumes are never exposed through the public API key.
+- `PATCH /api/jobs/:id/publication` requires an ATS session and job edit or tenant administration permission. Only active, approved jobs can be published, and a separately sanitized public description is required; internal descriptions are never exposed by fallback. See [PUBLIC_JOBS_API.md](ats_backend/docs/PUBLIC_JOBS_API.md) for the developer contract.
+
+## 5. Multi-Tenant Email & Custom Domain Architecture
 
 ### Strategy Options
 1. **Model 1 (BYOE - Direct Mail Account)**:
