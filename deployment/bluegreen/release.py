@@ -536,6 +536,11 @@ class Controller:
             self.docker(*args, 'migrate', 'deploy', '--schema', '/app/prisma/schema.prisma', timeout=180)
             self.docker(*args, 'migrate', 'diff', '--from-schema-datasource', '/app/prisma/schema.prisma',
                         '--to-schema-datamodel', '/app/prisma/schema.prisma', '--exit-code', timeout=90)
+            # Versioned permission configuration runs once per role after schema verification.
+            config_args = list(args)
+            config_args[config_args.index('--entrypoint') + 1] = 'node'
+            policy = "const fs=require('fs');const path='/app/dist/auth/services/job-action-permission-policy.js';if(fs.existsSync(path)){const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();require(path).applyJobActionPermissions(p).then(()=>console.log('JOB_OWN_ACTIONS_CONFIGURED')).catch(e=>{console.error(e.message);process.exitCode=1}).finally(()=>p.$disconnect())}"
+            self.docker(*config_args, '-e', policy, timeout=150)
         compatible = set(self.config.get('compatible_schema_hashes', []))
         compatible.update([old_hash, new_hash])
         self.config['compatible_schema_hashes'] = sorted(compatible)
