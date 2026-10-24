@@ -245,7 +245,17 @@ def validate_additive_migration(sql, migration_name=None):
     )
     if (migration_name == submission_resume_migration or submission_resume_marker in sql) and not reviewed_submission_resume:
         raise RuntimeError(context + 'submission resume grant differs from the approved permission changes')
-    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume):
+    # Reviewed logo split: only populate the new optional field; old application
+    # images still read logo_url. Bind approval to both identity and exact SQL.
+    tenant_logo_migration = '20261024140000_separate_tenant_logos'
+    reviewed_tenant_logos = (
+        migration_name == tenant_logo_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == '2c2ac37e284d79b3bbba99990df739c0b676a4104cd7a746269de1fb0bdea7c6'
+    )
+    if migration_name == tenant_logo_migration and not reviewed_tenant_logos:
+        raise RuntimeError(context + 'tenant logo migration differs from the approved additive field and backfill')
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
