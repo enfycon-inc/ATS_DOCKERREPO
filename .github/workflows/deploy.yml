@@ -134,6 +134,23 @@ jobs:
         if: env.skip != 'true' && matrix.service == 'parser'
         working-directory: ${{ matrix.path }}
         run: python3 -m compileall -q app main.py
+      - name: Check out canonical frontend contracts
+        if: env.skip != 'true' && matrix.service == 'frontend'
+        uses: actions/checkout@v4
+        with:
+          repository: enfycon-inc/ats_backend
+          path: ats_backend
+          ref: main
+          token: ${{ secrets.GH_PAT }}
+      - name: Verify frontend contracts against backend revision
+        if: env.skip != 'true' && matrix.service == 'frontend'
+        working-directory: ${{ matrix.path }}
+        run: |
+          echo "Canonical backend revision: $(git -C ../ats_backend rev-parse HEAD)"
+          node scripts/sync-tenant-branding.cjs --check-backend
+          node scripts/sync-sign-in-policy.cjs --check-backend
+          node scripts/sync-job-access.cjs --check-backend
+          node --test tests/contract-validation.test.cjs
       - name: Record source revision
         if: env.skip != 'true'
         id: source
