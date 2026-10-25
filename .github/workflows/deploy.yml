@@ -150,6 +150,7 @@ jobs:
           node scripts/sync-tenant-branding.cjs --check-backend
           node scripts/sync-sign-in-policy.cjs --check-backend
           node scripts/sync-job-access.cjs --check-backend
+          node scripts/sync-notification-preferences.cjs --check-backend
           node --test tests/contract-validation.test.cjs
       - name: Record source revision
         if: env.skip != 'true'
