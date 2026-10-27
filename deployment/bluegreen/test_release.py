@@ -120,6 +120,8 @@ class Fake(release.Controller):
     def docker(self, *args, **kwargs):
         if args[0] == 'inspect':
             return json.dumps([self.objects[args[1]]]) if args[1] in self.objects else 'missing'
+        if args[0] == 'exec' and 'inspect' in args and 'ping' in args:
+            return '-> worker@test: OK\n    - pong'
         if args[0] == 'ps':
             names = list(self.objects)
             if '--filter' in args:
@@ -129,8 +131,6 @@ class Fake(release.Controller):
             return ''
         if args[0] == 'logs':
             return 'celery@test ready.'
-        if args[0] == 'exec' and 'inspect' in args and 'ping' in args:
-            return '-> worker@test: OK\n    - pong'
         if args[0] == 'exec' and any('getJobCounts' in arg for arg in args):
             self.objects[args[1]]['State']['Status'] = 'exited'
         if args[0] == 'start':
@@ -233,7 +233,7 @@ class Tests(unittest.TestCase):
 
     def test_worker_readiness_uses_live_celery_ping_not_log_marker(self):
         record = self.controller.state['releases']['initial']
-        self.controller.docker = lambda *args, **kwargs: 'worker log rotated; no ready marker' if args[0] == 'logs' else '-> worker@test: OK\\n    - pong'
+        self.controller.docker = lambda *args, **kwargs: 'worker log rotated; no ready marker' if args[0] == 'logs' else '-> worker@test: OK\n    - pong'
         self.controller.healthy(record, ['worker'], timeout=30)
 
     def test_recover_unmodified_worker_does_not_require_worker_probe(self):

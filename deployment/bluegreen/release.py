@@ -533,7 +533,7 @@ class Controller:
                     # vary between Celery versions. Require broker/consumer status.
                     try:
                         status = self.docker('exec', name, 'celery', '-A', 'app.celery_app', 'inspect', 'ping', '--timeout=5', timeout=10)
-                        if not re.search(r'->\s+pong\b', status, re.I):
+                        if not re.search(r'->\s+[^\s:]+:\s*OK\s*\n\s*-\s*pong\b', status, re.I):
                             reasons.append('Celery worker did not answer inspect ping')
                             service_ready = False
                     except Exception as error:
