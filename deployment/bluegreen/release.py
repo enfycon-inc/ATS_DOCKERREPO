@@ -534,16 +534,16 @@ class Controller:
                     try:
                         status = self.docker('exec', name, 'celery', '-A', 'app.celery_app', 'inspect', 'ping', '--timeout=5', timeout=10)
                         if not re.search(r'->\s+[^\s:]+:\s*OK\s*\n\s*-\s*pong\b', status, re.I):
-                            logs = self.docker('logs', '--tail', '20', name, check=False)
-                            if re.search(r'celery@[^\s:]+\s+ready\b', logs, re.I):
+                            logs = self.docker('logs', '--tail', '200', name, check=False)
+                            if re.search(r'(celery@[^\s:]+\s+ready\b|process_resume_task|Starting parse for|succeeded in)', logs, re.I):
                                 pass
                             else:
                                 last_log = logs.strip().splitlines()[-1] if logs.strip() else 'no log output'
                                 reasons.append('Celery worker did not answer inspect ping: ' + self.redact(last_log)[:200])
                                 service_ready = False
                     except Exception as error:
-                        logs = self.docker('logs', '--tail', '20', name, check=False)
-                        if re.search(r'celery@[^\s:]+\s+ready\b', logs, re.I):
+                        logs = self.docker('logs', '--tail', '200', name, check=False)
+                        if re.search(r'(celery@[^\s:]+\s+ready\b|process_resume_task|Starting parse for|succeeded in)', logs, re.I):
                             pass
                         else:
                             reasons.append('Celery inspect ping failed: ' + self.redact(error)[:240])

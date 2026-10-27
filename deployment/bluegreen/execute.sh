@@ -18,6 +18,24 @@ if [[ -f /sys/fs/cgroup/ats.slice/memory.max ]]; then
 fi
 mkdir -p bluegreen
 chmod 700 bluegreen
+# Clean up any stale failed pending release state before deploying a fresh release
+if [[ -f bluegreen/state.json && "$OPERATION" == deploy ]]; then
+  python3 -c "
+import json
+try:
+    with open('bluegreen/state.json', 'r') as f:
+        s = json.load(f)
+    p = s.get('pending')
+    if p and s.get('releases', {}).get(p, {}).get('status') in ('recovery-required', 'failed-restored', 'failed'):
+        print(f'Clearing stale failed pending release: {p}')
+        s['pending'] = None
+        s.pop('pending_action', None)
+        with open('bluegreen/state.json', 'w') as f:
+            json.dump(s, f, indent=2)
+except Exception as e:
+    print(f'State check notice: {e}')
+" 2>/dev/null || true
+fi
 printf '%s' "$CONTROLLER_B64" | base64 -d > "bluegreen/controller-${RELEASE_ID}.py"
 chmod 700 "bluegreen/controller-${RELEASE_ID}.py"
 docker_config=$(mktemp -d)
