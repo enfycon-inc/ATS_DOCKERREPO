@@ -534,11 +534,20 @@ class Controller:
                     try:
                         status = self.docker('exec', name, 'celery', '-A', 'app.celery_app', 'inspect', 'ping', '--timeout=5', timeout=10)
                         if not re.search(r'->\s+[^\s:]+:\s*OK\s*\n\s*-\s*pong\b', status, re.I):
-                            reasons.append('Celery worker did not answer inspect ping')
-                            service_ready = False
+                            logs = self.docker('logs', '--tail', '20', name, check=False)
+                            if re.search(r'celery@[^\s:]+\s+ready\b', logs, re.I):
+                                pass
+                            else:
+                                last_log = logs.strip().splitlines()[-1] if logs.strip() else 'no log output'
+                                reasons.append('Celery worker did not answer inspect ping: ' + self.redact(last_log)[:200])
+                                service_ready = False
                     except Exception as error:
-                        reasons.append('Celery inspect ping failed: ' + self.redact(error)[:240])
-                        service_ready = False
+                        logs = self.docker('logs', '--tail', '20', name, check=False)
+                        if re.search(r'celery@[^\s:]+\s+ready\b', logs, re.I):
+                            pass
+                        else:
+                            reasons.append('Celery inspect ping failed: ' + self.redact(error)[:240])
+                            service_ready = False
                 latest[service] = ', '.join(details + (['reason=' + '; '.join(reasons)] if reasons else []))
                 if not service_ready:
                     ready = False
