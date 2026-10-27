@@ -255,7 +255,17 @@ def validate_additive_migration(sql, migration_name=None):
     )
     if migration_name == tenant_logo_migration and not reviewed_tenant_logos:
         raise RuntimeError(context + 'tenant logo migration differs from the approved additive field and backfill')
-    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos):
+    # Reviewed unit geofences: populate operating unit geofences from existing branch geofences.
+    # Bind approval to both identity and exact normalized SQL.
+    unit_geofences_migration = '20261026170000_unit_geofences'
+    reviewed_unit_geofences = (
+        migration_name == unit_geofences_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == 'd60ca72c29c18bd1f507c524a5a243336e1b1af678a32df3b9ed3a09e187fbbd'
+    )
+    if migration_name == unit_geofences_migration and not reviewed_unit_geofences:
+        raise RuntimeError(context + 'unit geofences migration differs from the approved additive table and backfill')
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')

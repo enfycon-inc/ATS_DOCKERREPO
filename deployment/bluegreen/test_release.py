@@ -62,6 +62,31 @@ class TenantLogoMigrationTests(unittest.TestCase):
                     release.validate_additive_migration(altered, migration.parent.name)
 
 
+class UnitGeofencesMigrationTests(unittest.TestCase):
+    def test_unit_geofences_backfill_accepts_only_reviewed_identity_and_content(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261026170000_unit_geofences/migration.sql'
+        sql = migration.read_text().replace('\r\n', '\n')
+        for reviewed in (sql, sql.replace('\n', '\r\n')):
+            release.validate_additive_migration(reviewed, migration.parent.name)
+        for name in (None, 'another_migration'):
+            with self.assertRaisesRegex(RuntimeError, 'data-changing migration needs separate review'):
+                release.validate_additive_migration(sql, name)
+
+    def test_unit_geofences_backfill_rejects_modified_or_unsafe_sql(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261026170000_unit_geofences/migration.sql'
+        sql = migration.read_text()
+        for altered in (
+            sql.replace('-- ATS: rollback-compatible', ''),
+            sql.replace("SET LOCAL lock_timeout = '5s';", ''),
+            sql.replace('COMMIT;', ''),
+            sql.replace('ON CONFLICT(business_unit_id) DO NOTHING;', ''),
+            sql.replace('COMMIT;', 'UPDATE ats.tenants SET name = NULL;\nCOMMIT;'),
+        ):
+            with self.subTest(altered=altered):
+                with self.assertRaises(RuntimeError):
+                    release.validate_additive_migration(altered, migration.parent.name)
+
+
 class Fake(release.Controller):
     def __init__(self, root):
         self.root = Path(root)
