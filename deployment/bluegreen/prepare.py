@@ -30,13 +30,20 @@ if operation == 'deploy':
                 if service in images:
                     raise ValueError('Duplicate service image')
                 images[service] = reference
-        expected = os.environ['SERVICE']
-        if os.environ['EVENT_NAME'] == 'repository_dispatch':
+        if os.environ.get('EVENT_NAME') == 'repository_dispatch':
             expected = {'enfycon-inc/ats_backend':'backend','enfycon-inc/ats_frontend_main':'frontend',
                         'enfycon-inc/resume-parser':'parser'}[os.environ['DISPATCH_REPO']]
-        expected_set = {'frontend','backend','parser'} if expected == 'all' else {expected}
-        if set(images) != expected_set:
-            raise ValueError('Required built image artifacts are missing')
+            expected_set = {expected}
+            if set(images) != expected_set:
+                raise ValueError('Required built image artifacts are missing')
+        elif os.environ.get('EVENT_NAME') == 'push':
+            if not images:
+                raise ValueError('No built image artifacts found to deploy')
+        else:
+            expected = os.environ.get('SERVICE', 'all')
+            expected_set = {'frontend','backend','parser'} if expected == 'all' else {expected}
+            if set(images) != expected_set:
+                raise ValueError('Required built image artifacts are missing')
 elif operation not in ('bootstrap','rollback','status','cleanup'):
     raise ValueError('Unknown production operation')
 controller = base64.b64encode(Path('deployment/bluegreen/release.py').read_bytes()).decode()

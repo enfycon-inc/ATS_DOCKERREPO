@@ -49,8 +49,14 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+    outputs:
+      build_backend: ${{ steps.changes.outputs.backend }}
+      build_frontend: ${{ steps.changes.outputs.frontend }}
+      build_parser: ${{ steps.changes.outputs.parser }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Check out backend migration fixtures
         uses: actions/checkout@v4
         with:
@@ -100,6 +106,59 @@ jobs:
             --exit-code
       - run: python3 deployment/bluegreen/test_release.py
       - run: python3 -m py_compile deployment/bluegreen/release.py
+      - name: Detect modified services on push
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            echo "parser=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git rev-parse --verify "$BEFORE" >/dev/null 2>&1; then
+            DIFF_TARGET="HEAD~1"
+          else
+            DIFF_TARGET="$BEFORE..${{ github.event.after }}"
+          fi
+
+          CHANGED_FILES=$(git diff --name-only $DIFF_TARGET 2>/dev/null || git show --pretty="" --name-only HEAD)
+          echo "=== Changed files in push ==="
+          echo "$CHANGED_FILES"
+
+          BUILD_BACKEND=false
+          BUILD_FRONTEND=false
+          BUILD_PARSER=false
+
+          while IFS= read -r file; do
+            case "$file" in
+              ats_backend/*|deployment/production/compose.yml|deployment/production/init-schemas.sql)
+                BUILD_BACKEND=true
+                ;;
+              ats_frontend_main/*)
+                BUILD_FRONTEND=true
+                ;;
+              resume-parser-main/*|deployment/production/Dockerfile.parser|deployment/production/parser-*)
+                BUILD_PARSER=true
+                ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
+          if [ "$BUILD_BACKEND" = false ] && [ "$BUILD_FRONTEND" = false ] && [ "$BUILD_PARSER" = false ]; then
+            echo "No service-specific files modified. Defaulting to backend and frontend."
+            BUILD_BACKEND=true
+            BUILD_FRONTEND=true
+          fi
+
+          echo "Detected service build flags:"
+          echo "  backend: $BUILD_BACKEND"
+          echo "  frontend: $BUILD_FRONTEND"
+          echo "  parser: $BUILD_PARSER"
+
+          echo "backend=$BUILD_BACKEND" >> "$GITHUB_OUTPUT"
+          echo "frontend=$BUILD_FRONTEND" >> "$GITHUB_OUTPUT"
+          echo "parser=$BUILD_PARSER" >> "$GITHUB_OUTPUT"
   build:
     name: Build ${{ matrix.tag }}
     needs: verify
@@ -129,11 +188,22 @@ jobs:
           MATRIX_REPO: ${{ matrix.repo }}
           MATRIX_SERVICE: ${{ matrix.service }}
           SERVICE: ${{ inputs.service || 'all' }}
+          BUILD_BACKEND: ${{ needs.verify.outputs.build_backend }}
+          BUILD_FRONTEND: ${{ needs.verify.outputs.build_frontend }}
+          BUILD_PARSER: ${{ needs.verify.outputs.build_parser }}
         run: |
           if [ "$EVENT_NAME" = repository_dispatch ] && [ "$DISPATCH_REPO" != "$MATRIX_REPO" ]; then
             echo 'skip=true' >> "$GITHUB_ENV"
           elif [ "$EVENT_NAME" = workflow_dispatch ] && [ "$SERVICE" != all ] && [ "$SERVICE" != "$MATRIX_SERVICE" ]; then
             echo 'skip=true' >> "$GITHUB_ENV"
+          elif [ "$EVENT_NAME" = push ]; then
+            if [ "$MATRIX_SERVICE" = backend ] && [ "$BUILD_BACKEND" != true ]; then
+              echo 'skip=true' >> "$GITHUB_ENV"
+            elif [ "$MATRIX_SERVICE" = frontend ] && [ "$BUILD_FRONTEND" != true ]; then
+              echo 'skip=true' >> "$GITHUB_ENV"
+            elif [ "$MATRIX_SERVICE" = parser ] && [ "$BUILD_PARSER" != true ]; then
+              echo 'skip=true' >> "$GITHUB_ENV"
+            fi
           fi
       - uses: actions/checkout@v4
         if: env.skip != 'true'
