@@ -316,15 +316,19 @@ class Controller:
                                 timeout=timeout)
         if check and result.returncode:
             # Do not include command arguments or inspection output containing secrets.
-            output = result.stdout[-3000:]
-            if self.config:
-                for template in self.config['templates'].values():
-                    for item in template['Config']['Env']:
-                        key, _, value = item.partition('=')
-                        if re.search('PASSWORD|SECRET|TOKEN|DATABASE_URL', key, re.I) and len(value) > 3:
-                            output = output.replace(value, '[redacted]')
+            output = self.redact(result.stdout)[-3000:]
             raise RuntimeError(output or 'Command failed: ' + args[0])
         return result.stdout
+
+    def redact(self, value):
+        output = str(value)
+        if self.config:
+            for template in self.config['templates'].values():
+                for item in template['Config']['Env']:
+                    key, _, secret = item.partition('=')
+                    if re.search('PASSWORD|SECRET|TOKEN|DATABASE_URL', key, re.I) and len(secret) > 3:
+                        output = output.replace(secret, '[redacted]')
+        return output
 
     def docker(self, *args, **kwargs):
         return self.command(['docker', *args], **kwargs)
@@ -480,26 +484,64 @@ class Controller:
     def healthy(self, record, services=SERVICES, timeout=210):
         deadline = time.monotonic() + timeout
         stable = None
+        latest = {}
         while time.monotonic() < deadline:
             ready = True
             for service in services:
-                obj = self.inspect(record['containers'][service])
-                state = obj['State']
-                if obj['Image'] != record['images'][service]['id']:
-                    raise RuntimeError('Running image mismatch: ' + service)
-                if state['Status'] != 'running' or state.get('OOMKilled') or state.get('Health', {}).get('Status') in ('starting', 'unhealthy'):
+                name = record['containers'][service]
+                reasons = []
+                try:
+                    obj = self.inspect(name)
+                except Exception as error:
+                    latest[service] = f'{name}: inspect failed: {self.redact(error)[:240]}'
                     ready = False
-                if service == 'parser' and ready:
+                    continue
+                state = obj.get('State') or {}
+                health = state.get('Health') or {}
+                service_ready = True
+                details = [f'container={name}', f"state={state.get('Status', 'unknown')}",
+                           f"oom={bool(state.get('OOMKilled'))}"]
+                if obj.get('Image') != record['images'][service]['id']:
+                    reasons.append('running image does not match release image')
+                if state.get('Status') != 'running':
+                    reasons.append('container is not running')
+                if state.get('OOMKilled'):
+                    reasons.append('container was OOM-killed')
+                health_status = health.get('Status')
+                if health_status:
+                    details.append('health=' + health_status)
+                    if health_status in ('starting', 'unhealthy'):
+                        reasons.append('Docker health check is ' + health_status)
+                    logs = health.get('Log') or []
+                    if logs:
+                        last = logs[-1]
+                        details.append('health_exit=' + str(last.get('ExitCode', 'unknown')))
+                        output = self.redact(last.get('Output', '')).strip().replace('\n', ' ')[:240]
+                        if output:
+                            details.append('health_output=' + output)
+                if obj.get('Image') != record['images'][service]['id'] or state.get('Status') != 'running' or state.get('OOMKilled') or health_status in ('starting', 'unhealthy'):
+                    service_ready = False
+                if service == 'parser' and service_ready:
                     try:
-                        self.docker('exec', record['containers'][service], 'python', '-c',
+                        self.docker('exec', name, 'python', '-c',
                                     "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json',timeout=4).read()", timeout=10)
-                    except RuntimeError:
-                        ready = False
-                if service == 'worker' and ready and record['containers'][service].startswith('ats-release-'):
+                    except Exception as error:
+                        reasons.append('parser OpenAPI probe failed: ' + self.redact(error)[:240])
+                        service_ready = False
+                if service == 'worker' and service_ready and name.startswith('ats-release-'):
                     # "running" alone includes the model-loading phase. Celery
                     # emits this only after its broker connection and consumer start.
-                    logs = self.docker('logs', '--tail', '1000', record['containers'][service])
-                    ready = bool(re.search(r'celery@[^\s]+ ready\.', logs))
+                    try:
+                        logs = self.docker('logs', '--tail', '1000', name)
+                        if not re.search(r'celery@[^\s]+ ready\.', logs):
+                            reasons.append('Celery ready marker not present in the last 1000 log lines')
+                            service_ready = False
+                    except Exception as error:
+                        reasons.append('worker log probe failed: ' + self.redact(error)[:240])
+                        service_ready = False
+                latest[service] = ', '.join(details + (['reason=' + '; '.join(reasons)] if reasons else []))
+                if not service_ready:
+                    ready = False
             if ready:
                 stable = stable or time.monotonic()
                 if time.monotonic() - stable >= 10:
@@ -507,7 +549,9 @@ class Controller:
             else:
                 stable = None
             time.sleep(3)
-        raise RuntimeError('Candidate readiness checks timed out')
+        report = '; '.join(f'{service}[{latest.get(service, "no observation")}]' for service in services)
+        print('READINESS_TIMEOUT ' + self.redact(report)[:2400], flush=True)
+        raise RuntimeError('Readiness checks timed out: ' + self.redact(report)[:2400])
 
     def schema(self, image):
         # No network, writable mounts, or startup side effects when reading schema.
@@ -618,7 +662,10 @@ class Controller:
         (self.root / 'Caddyfile').write_text(config)
 
     def public_checks(self, record):
-        self.healthy(record)
+        # The changed services and any changed parser/worker are checked before
+        # switching. Public readiness confirms the HTTP pair and live routes;
+        # unchanged background services do not block a frontend-only release.
+        self.healthy(record, PAIR)
         for url in self.config['public_urls']:
             with urllib.request.urlopen(url, timeout=15) as response:
                 if response.status != 200:
@@ -792,7 +839,9 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                     if record['containers']['worker'] != old['containers']['worker']:
                         self.drain_worker(record['containers']['worker'])
                     self.docker('start', old['containers']['worker'])
-                self.healthy(old)
+                self.public_checks(old)
+                if worker_stopped:
+                    self.healthy(old, ('parser', 'worker'))
                 record['status'] = 'failed-restored'
                 self.state['pending'] = None
                 self.state.pop('pending_action', None)

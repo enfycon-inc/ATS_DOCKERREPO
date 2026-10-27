@@ -101,7 +101,7 @@ class Fake(release.Controller):
                       'pending':None,'releases':{'initial':initial},'cleanup_error':None}
         templates = {s:{'Name':'/'+names[s], 'HostConfig':{'Memory':1}, 'Config':{'Env':[]}} for s in release.SERVICES}
         self.config = {'templates':templates,'registry_owner':'enfycon-inc',
-                       'assets_root':str(self.root/'assets'),'caddy_base':'reverse_proxy frontend:3000\nreverse_proxy backend:5000','project':'ats-prod'}
+                       'assets_root':str(self.root/'assets'),'caddy_base':'reverse_proxy frontend:3000\nreverse_proxy backend:5000','project':'ats-prod', 'public_urls':[]}
         self.objects = {}
         for s in release.SERVICES:
             self.objects[names[s]] = {'Id':names[s],'Name':'/'+names[s],'Image':images[s]['id'],
@@ -178,9 +178,12 @@ class Fake(release.Controller):
         self.routes = config
 
     def public_checks(self, record):
-        self.healthy(record)
-        if self.mode == 'public':
+        release.Controller.public_checks(self, record)
+        if self.mode == 'public' and record['id'] != 'initial':
             raise RuntimeError('Public checks failed')
+
+    def verify_routes(self, record):
+        pass
 
     def public_checks_fast(self, record):
         pass
@@ -206,6 +209,25 @@ class Tests(unittest.TestCase):
 
     def deploy(self, n, service='backend'):
         self.controller.deploy('gha-'+str(n)+'-1', {service:'ghcr.io/enfycon-inc/ats-'+service+'@sha256:'+'a'*64})
+
+    def test_readiness_timeout_names_failing_service_and_redacts_health_output(self):
+        obj = self.controller.objects['initial-parser']
+        obj['State']['Health'] = {'Status':'unhealthy','Log':[{'ExitCode':1,'Output':'failed token=secret-value'}]}
+        self.controller.config['templates']['parser']['Config']['Env'] = ['API_TOKEN=secret-value']
+        record = self.controller.state['releases']['initial']
+        with patch('builtins.print') as output, self.assertRaisesRegex(RuntimeError, 'parser.*health=unhealthy') as error:
+            self.controller.healthy(record, ['parser'], timeout=30)
+        self.assertIn('health_exit=1', str(error.exception))
+        self.assertNotIn('secret-value', str(error.exception))
+        self.assertIn('READINESS_TIMEOUT parser[', output.call_args.args[0])
+        self.assertNotIn('secret-value', output.call_args.args[0])
+
+    def test_public_readiness_checks_http_pair_without_blocking_on_unchanged_worker(self):
+        self.controller.objects['initial-worker']['State']['Health'] = {'Status':'unhealthy'}
+        record = self.controller.state['releases']['initial']
+        with patch.object(self.controller, 'healthy', wraps=self.controller.healthy) as healthy:
+            release.Controller.public_checks(self.controller, record)
+        self.assertEqual(healthy.call_args.args[1], release.PAIR)
 
     def test_crlf_only_is_not_schema_change(self):
         self.assertEqual(release.canonical_schema('model A {\r\n}\r\n'),release.canonical_schema('model A {\n}\n'))
