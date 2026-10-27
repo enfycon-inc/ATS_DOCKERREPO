@@ -14,6 +14,25 @@ spec.loader.exec_module(release)
 
 
 class MigrationChecksumTests(unittest.TestCase):
+    def test_job_export_grant_accepts_only_reviewed_sql_and_identity(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261027110000_job_export_permission/migration.sql'
+        sql = migration.read_text()
+        for reviewed in (sql, sql.replace('\n', '\r\n')):
+            release.validate_additive_migration(reviewed, migration.parent.name)
+        for altered, name in (
+            (sql, 'unrelated_migration'),
+            (sql.replace('-- ATS: rollback-compatible', ''), migration.parent.name),
+            (sql.replace('COMMIT;', ''), migration.parent.name),
+            (sql.replace("SET LOCAL lock_timeout = '5s';", ''), migration.parent.name),
+            (sql.replace("'DELIVERY_HEAD'", "'RECRUITER'"), migration.parent.name),
+            (sql.replace('job:export', 'tenant:manage'), migration.parent.name),
+            (sql.replace('COMMIT;', 'UPDATE ats.users SET is_active = false;\nCOMMIT;'), migration.parent.name),
+            (sql.replace("AND NOT (COALESCE(cr.permissions, '[]'::jsonb) ? 'job:export')", ''), migration.parent.name),
+        ):
+            with self.subTest(name=name, sql=altered):
+                with self.assertRaises(RuntimeError):
+                    release.validate_additive_migration(altered, name)
+
     def test_accepts_only_line_ending_variants(self):
         lf = b'BEGIN;\nSELECT 1;\nCOMMIT;\n'
         crlf = lf.replace(b'\n', b'\r\n')

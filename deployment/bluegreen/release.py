@@ -265,7 +265,18 @@ def validate_additive_migration(sql, migration_name=None):
     )
     if migration_name == unit_geofences_migration and not reviewed_unit_geofences:
         raise RuntimeError(context + 'unit geofences migration differs from the approved additive table and backfill')
-    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences):
+    # Reviewed export grant: no schema change; older images tolerate the new key.
+    # The marker alone cannot authorize different recipients or unrelated writes.
+    job_export_migration = '20261027110000_job_export_permission'
+    job_export_marker = '-- ATS: permission-grant DELIVERY_HEAD_AND_ABOVE job:export'
+    reviewed_job_export = (
+        migration_name == job_export_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == '91e5ca8d3a199b0c7bf473b27f7e11fe87a736098e1927b42d5769455794fd31'
+    )
+    if (migration_name == job_export_migration or job_export_marker in sql) and not reviewed_job_export:
+        raise RuntimeError(context + 'job export grant differs from the approved permission changes')
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
