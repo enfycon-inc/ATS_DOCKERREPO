@@ -17,6 +17,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+/local18.env
+
 
 # Testing scripts and queries
 /output

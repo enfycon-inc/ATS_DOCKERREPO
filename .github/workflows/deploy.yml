@@ -151,6 +151,8 @@ jobs:
           node scripts/sync-sign-in-policy.cjs --check-backend
           node scripts/sync-job-access.cjs --check-backend
           node scripts/sync-notification-preferences.cjs --check-backend
+          node scripts/sync-user-management-contract.cjs --check-backend
+          node scripts/sync-submission-auto-approval.cjs --check-backend
           node --test tests/contract-validation.test.cjs
       - name: Record source revision
         if: env.skip != 'true'
