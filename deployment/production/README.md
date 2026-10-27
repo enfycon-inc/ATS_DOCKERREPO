@@ -1,7 +1,7 @@
 # ATS production on 13.238.201.190
 
 The VPS has 2 CPUs and 7.6 GiB RAM. ATS containers run under `ats.slice`:
-CPU quota 100% (one CPU), memory high 4096 MiB, hard maximum 4352 MiB,
+CPU quota 100% (one CPU), memory high 6144 MiB, hard maximum 6656 MiB (6.5 GiB),
 and no swap. Per-container limits total 3776 MiB. The memory allocation was
 increased on 2026-10-09 to support blue-green parser overlap plus the 256 MiB
 deployment reserve. It leaves approximately 3.4 GiB outside ATS for the host

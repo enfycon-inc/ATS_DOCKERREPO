@@ -802,6 +802,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             extra = sum(self.config['templates'][s]['HostConfig']['Memory'] for s in PAIR)
             if parser_changed:
                 extra += self.config['templates']['parser']['HostConfig']['Memory']
+            self.cleanup()
             self.admission(extra)
             backed_up = False
             if record['images']['backend']['id'] != old['images']['backend']['id'] or old_hash != new_hash:

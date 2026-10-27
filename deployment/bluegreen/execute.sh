@@ -2,6 +2,20 @@ sudo -n --preserve-env=GH_TOKEN,GH_ACTOR,IMAGE_OWNER,OPERATION,RELEASE_ID,ROLLBA
 set -euo pipefail
 cd /var/www/ats-prod
 test -f compose.yml
+# Configure ats.slice memory up to 6.5 GB (MemoryMax=6656M, MemoryHigh=6144M)
+mkdir -p /etc/systemd/system/ats.slice.d
+cat <<'EOF' > /etc/systemd/system/ats.slice.d/override.conf
+[Slice]
+MemoryHigh=6144M
+MemoryMax=6656M
+EOF
+systemctl daemon-reload 2>/dev/null || true
+if systemctl status ats.slice >/dev/null 2>&1; then
+  systemctl set-property ats.slice MemoryHigh=6144M MemoryMax=6656M 2>/dev/null || true
+fi
+if [[ -f /sys/fs/cgroup/ats.slice/memory.max ]]; then
+  echo 6979321856 > /sys/fs/cgroup/ats.slice/memory.max 2>/dev/null || true
+fi
 mkdir -p bluegreen
 chmod 700 bluegreen
 printf '%s' "$CONTROLLER_B64" | base64 -d > "bluegreen/controller-${RELEASE_ID}.py"
