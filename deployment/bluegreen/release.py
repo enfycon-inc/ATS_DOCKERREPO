@@ -529,15 +529,15 @@ class Controller:
                         reasons.append('parser OpenAPI probe failed: ' + self.redact(error)[:240])
                         service_ready = False
                 if service == 'worker' and service_ready and name.startswith('ats-release-'):
-                    # "running" alone includes the model-loading phase. Celery
-                    # emits this only after its broker connection and consumer start.
+                    # The log marker is supplemental evidence; logs may rotate or
+                    # vary between Celery versions. Require broker/consumer status.
                     try:
-                        logs = self.docker('logs', '--tail', '1000', name)
-                        if not re.search(r'celery@[^\s]+ ready\.', logs):
-                            reasons.append('Celery ready marker not present in the last 1000 log lines')
+                        status = self.docker('exec', name, 'celery', '-A', 'app.celery_app', 'inspect', 'ping', '--timeout=5', timeout=10)
+                        if not re.search(r'->\s+pong\b', status, re.I):
+                            reasons.append('Celery worker did not answer inspect ping')
                             service_ready = False
                     except Exception as error:
-                        reasons.append('worker log probe failed: ' + self.redact(error)[:240])
+                        reasons.append('Celery inspect ping failed: ' + self.redact(error)[:240])
                         service_ready = False
                 latest[service] = ', '.join(details + (['reason=' + '; '.join(reasons)] if reasons else []))
                 if not service_ready:
@@ -700,7 +700,16 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
             if output.strip().startswith('['):
                 self.drain_worker(candidate_worker)
         self.docker('start', current['containers']['worker'])
-        self.healthy(current)
+        self.public_checks(current)
+        if self.state.get('pending_action') == 'deploy':
+            changed = [service for service in ('parser', 'worker')
+                       if record['images'][service]['id'] != current['images'][service]['id']]
+            if changed:
+                self.healthy(current, changed)
+        elif self.state.get('pending_action') == 'rollback':
+            snapshot = self.state.get('rollback_snapshot') or record
+            if snapshot['images']['worker']['id'] != current['images']['worker']['id']:
+                self.healthy(current, ('worker',))
         if self.state.get('pending_action') == 'rollback':
             self.state['releases'][pending] = self.state.pop('rollback_snapshot')
         else:
@@ -942,7 +951,9 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                 if output.strip().startswith('[') and record['containers']['worker'] != old['containers']['worker']:
                     self.drain_worker(record['containers']['worker'])
                 self.docker('start', old['containers']['worker'])
-            self.healthy(old)
+            self.public_checks(old)
+            if worker_handoff:
+                self.healthy(old, ('parser', 'worker'))
             self.state['releases'][target] = self.state.pop('rollback_snapshot')
             self.state['pending'] = None
             self.state.pop('pending_action', None)

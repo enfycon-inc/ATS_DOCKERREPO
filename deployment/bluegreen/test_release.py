@@ -129,6 +129,8 @@ class Fake(release.Controller):
             return ''
         if args[0] == 'logs':
             return 'celery@test ready.'
+        if args[0] == 'exec' and 'inspect' in args and 'ping' in args:
+            return '-> worker@test: OK\n    - pong'
         if args[0] == 'exec' and any('getJobCounts' in arg for arg in args):
             self.objects[args[1]]['State']['Status'] = 'exited'
         if args[0] == 'start':
@@ -228,6 +230,42 @@ class Tests(unittest.TestCase):
         with patch.object(self.controller, 'healthy', wraps=self.controller.healthy) as healthy:
             release.Controller.public_checks(self.controller, record)
         self.assertEqual(healthy.call_args.args[1], release.PAIR)
+
+    def test_worker_readiness_uses_live_celery_ping_not_log_marker(self):
+        record = self.controller.state['releases']['initial']
+        self.controller.docker = lambda *args, **kwargs: 'worker log rotated; no ready marker' if args[0] == 'logs' else '-> worker@test: OK\\n    - pong'
+        self.controller.healthy(record, ['worker'], timeout=30)
+
+    def test_recover_unmodified_worker_does_not_require_worker_probe(self):
+        c = self.controller
+        record = copy.deepcopy(c.state['releases']['initial'])
+        record.update(id='gha-1-1', status='switching')
+        c.state['releases']['gha-1-1'] = record
+        c.state['pending'] = 'gha-1-1'
+        c.state['pending_action'] = 'deploy'
+        with patch.object(c, 'healthy', wraps=c.healthy) as healthy:
+            c.recover()
+        self.assertEqual(healthy.call_args.args[1], release.PAIR)
+        self.assertIsNone(c.state['pending'])
+
+    def test_recover_changed_worker_requires_worker_probe(self):
+        c = self.controller
+        current = c.state['releases']['initial']
+        record = copy.deepcopy(current)
+        record.update(id='gha-1-1', status='preparing')
+        record['images']['parser'] = {'id':'candidate-parser', 'ref':'new', 'revision':'new'}
+        record['images']['worker'] = copy.deepcopy(record['images']['parser'])
+        record['containers']['parser'] = 'ats-release-gha-1-1-parser'
+        record['containers']['worker'] = 'ats-release-gha-1-1-worker'
+        c.state['releases']['gha-1-1'] = record
+        c.objects[record['containers']['parser']] = {'Id':record['containers']['parser'], 'Name':'/'+record['containers']['parser'], 'Image':'candidate-parser', 'State':{'Status':'running'}, 'Config':{'Labels':{}}}
+        c.objects[record['containers']['worker']] = {'Id':record['containers']['worker'], 'Name':'/'+record['containers']['worker'], 'Image':'candidate-parser', 'State':{'Status':'running'}, 'Config':{'Labels':{}}}
+        c.state['pending'] = 'gha-1-1'
+        c.state['pending_action'] = 'deploy'
+        with patch.object(c, 'healthy', wraps=c.healthy) as healthy:
+            c.recover()
+        self.assertEqual(healthy.call_args.args[1], ['parser', 'worker'])
+        self.assertIsNone(c.state['pending'])
 
     def test_crlf_only_is_not_schema_change(self):
         self.assertEqual(release.canonical_schema('model A {\r\n}\r\n'),release.canonical_schema('model A {\n}\n'))
@@ -657,6 +695,18 @@ COMMIT;
         self.controller.recover()
         self.assertEqual(self.controller.routes,'old routing')
         self.assertIsNone(self.controller.state['pending'])
+
+    def test_failed_interrupted_recovery_preserves_pending_state(self):
+        c = self.controller
+        record = copy.deepcopy(c.state['releases']['initial'])
+        record.update(id='gha-1-1', status='switching')
+        c.state['releases']['gha-1-1'] = record
+        c.state['pending'] = 'gha-1-1'
+        c.state['pending_action'] = 'deploy'
+        c.public_checks = lambda record: (_ for _ in ()).throw(RuntimeError('public service unavailable'))
+        with self.assertRaisesRegex(RuntimeError, 'public service unavailable'):
+            c.recover()
+        self.assertEqual(c.state['pending'], 'gha-1-1')
 
     def test_pending_images_are_protected_from_pruning(self):
         self.controller.state['releases']['candidate']=copy.deepcopy(self.controller.state['releases']['initial'])
