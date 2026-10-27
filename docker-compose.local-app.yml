@@ -1,0 +1,77 @@
+name: ats_local_app
+
+services:
+  local-redis:
+    image: redis:alpine
+    container_name: ats_local_redis
+    ports:
+      - "127.0.0.1:16379:6379"
+    volumes:
+      - ats_local_redis_data:/data
+    networks:
+      - local_app
+    restart: unless-stopped
+
+  parser:
+    image: ats_dockerrepo-api
+    container_name: ats_parser_local
+    ports:
+      - "127.0.0.1:18000:8000"
+    environment:
+      DATABASE_URL: postgresql://ats_local_replica:${ATS_LOCAL_REPLICA18_PASSWORD:?Set in local18.env}@local-postgres:5432/ats_replica?options=-csearch_path%3Dats,mass_mail,public
+      CELERY_BROKER_URL: redis://local-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://local-redis:6379/0
+    volumes:
+      - ./resume-parser-main:/app
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    networks:
+      - local_app
+    depends_on:
+      - local-redis
+    restart: unless-stopped
+
+  worker:
+    image: ats_dockerrepo-worker
+    container_name: ats_worker_local
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
+    environment:
+      DATABASE_URL: postgresql://ats_local_replica:${ATS_LOCAL_REPLICA18_PASSWORD:?Set in local18.env}@local-postgres:5432/ats_replica?options=-csearch_path%3Dats,mass_mail,public
+      CELERY_BROKER_URL: redis://local-redis:6379/0
+      CELERY_RESULT_BACKEND: redis://local-redis:6379/0
+    volumes:
+      - ./resume-parser-main:/app
+    networks:
+      - local_app
+    depends_on:
+      - local-redis
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.5
+    container_name: ats_local_keycloak
+    command: ["start-dev"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://local-postgres:5432/ats_replica
+      KC_DB_SCHEMA: keycloak
+      KC_DB_USERNAME: ats_local_replica
+      KC_DB_PASSWORD: ${ATS_LOCAL_REPLICA18_PASSWORD:?Set in local18.env}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: "18080"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "127.0.0.1:18080:8080"
+    networks:
+      - local_app
+    restart: unless-stopped
+
+networks:
+  local_app:
+    name: ats_local_app
+    external: true
+
+volumes:
+  ats_local_redis_data:
+    name: ats_local_redis_data
+

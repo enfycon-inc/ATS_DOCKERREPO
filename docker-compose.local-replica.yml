@@ -1,0 +1,25 @@
+name: ats_local_replica
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: ats_local_replica_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ats_replica
+      POSTGRES_USER: ats_local_replica
+      POSTGRES_PASSWORD: ${ATS_LOCAL_REPLICA18_PASSWORD:?Set ATS_LOCAL_REPLICA18_PASSWORD in local18.env}
+    ports:
+      - "127.0.0.1:55433:5432"
+    volumes:
+      - ats_dump_replica18_data:/var/lib/postgresql
+      - C:/Users/deb/Documents/ats_dump:/restore/ats_dump:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ats_local_replica -d ats_replica"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  ats_dump_replica18_data:
+    name: ats_dump_replica18_data
