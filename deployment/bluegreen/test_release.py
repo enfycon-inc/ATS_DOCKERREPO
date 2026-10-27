@@ -13,7 +13,65 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
 
+class OfficeEvidenceConfigurationTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.controller = release.Controller.__new__(release.Controller)
+        self.controller.home = Path(self.folder.name)
+        self.controller.config = {'templates': {'backend': {'Config': {'Env': [
+            'DATABASE_URL=unchanged', 'USER_OFFICE_EVIDENCE_ENABLED=false',
+        ]}}}}
+
+    def test_enable_persists_both_flags_without_changing_existing_environment(self):
+        self.controller.configure_office_evidence('enabled')
+        saved = json.loads((self.controller.home / 'runtime.json').read_text())
+        self.controller.config = saved
+        values = self.controller.backend_environment()
+        self.assertEqual(values['USER_OFFICE_EVIDENCE_ENABLED'], 'true')
+        self.assertEqual(values['USER_MANAGEMENT_TELEMETRY_ENABLED'], 'true')
+        self.assertEqual(values['DATABASE_URL'], 'unchanged')
+
+    def test_disable_persists_false_flags(self):
+        self.controller.configure_office_evidence('disabled')
+        values = self.controller.backend_environment()
+        self.assertEqual(values['USER_OFFICE_EVIDENCE_ENABLED'], 'false')
+        self.assertEqual(values['USER_MANAGEMENT_TELEMETRY_ENABLED'], 'false')
+
+    def test_no_override_preserves_existing_template(self):
+        self.assertEqual(self.controller.backend_environment(), {
+            'DATABASE_URL': 'unchanged', 'USER_OFFICE_EVIDENCE_ENABLED': 'false',
+        })
+
+    def test_invalid_mode_does_not_write_configuration(self):
+        with self.assertRaises(ValueError):
+            self.controller.configure_office_evidence('yes')
+        self.assertFalse((self.controller.home / 'runtime.json').exists())
+
+    def test_unrelated_or_invalid_overrides_are_rejected(self):
+        for flags in ({'DATABASE_URL': 'changed'}, {'USER_OFFICE_EVIDENCE_ENABLED': 'yes'}, []):
+            with self.subTest(flags=flags):
+                self.controller.config['backend_feature_flags'] = flags
+                with self.assertRaises(ValueError):
+                    self.controller.backend_environment()
+
+
 class MigrationChecksumTests(unittest.TestCase):
+    def test_permanent_submission_deletion_migration_meets_release_requirements(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261027200000_authorized_permanent_submission_deletion/migration.sql'
+        sql = migration.read_text()
+        for reviewed in (sql, sql.replace('\n', '\r\n')):
+            release.validate_additive_migration(reviewed, migration.parent.name)
+        for altered in (
+            sql.replace('-- ATS: rollback-compatible', ''),
+            sql.replace("SET LOCAL lock_timeout = '5s';", ''),
+            sql.replace('COMMIT;', ''),
+            sql.replace('COMMIT;', 'DELETE FROM ats.users;\nCOMMIT;'),
+        ):
+            with self.subTest(sql=altered):
+                with self.assertRaises(RuntimeError):
+                    release.validate_additive_migration(altered, migration.parent.name)
+
     def test_job_export_grant_accepts_only_reviewed_sql_and_identity(self):
         migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261027110000_job_export_permission/migration.sql'
         sql = migration.read_text()

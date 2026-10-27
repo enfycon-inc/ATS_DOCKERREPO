@@ -25,6 +25,11 @@ on:
         description: Retained release ID; blank selects previous release
         type: string
         default: ''
+      office_evidence:
+        description: Backend-wide office evidence and presence collection
+        type: choice
+        options: [unchanged, enabled, disabled]
+        default: unchanged
 concurrency:
   group: production-deployment
   cancel-in-progress: false
@@ -353,6 +358,7 @@ jobs:
           OPERATION: ${{ inputs.operation || 'deploy' }}
           RELEASE_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}
           ROLLBACK_TARGET: ${{ inputs.rollback_target }}
+          OFFICE_EVIDENCE_MODE: ${{ inputs.office_evidence || 'unchanged' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER || 'ubuntu' }}
@@ -360,7 +366,7 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           fingerprint: ${{ vars.VPS_HOST_FINGERPRINT }}
           command_timeout: 30m
-          envs: GH_TOKEN,GH_ACTOR,IMAGE_OWNER,OPERATION,RELEASE_ID,ROLLBACK_TARGET,DEPLOY_IMAGES,CONTROLLER_B64
+          envs: GH_TOKEN,GH_ACTOR,IMAGE_OWNER,OPERATION,RELEASE_ID,ROLLBACK_TARGET,OFFICE_EVIDENCE_MODE,DEPLOY_IMAGES,CONTROLLER_B64
           script_path: deployment/bluegreen/execute.sh
       - name: Record outcome
         if: always()

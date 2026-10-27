@@ -67,6 +67,28 @@ instead of being overwritten by an older ATS routing snapshot.
 
 ## Prerequisites and limits
 
+### Enable office evidence and presence collection
+
+In GitHub Actions, run the production workflow with `operation=deploy`,
+`service=backend`, and `office_evidence=enabled`. This explicitly enables both
+`USER_MANAGEMENT_TELEMETRY_ENABLED` and `USER_OFFICE_EVIDENCE_ENABLED` for all
+tenants served by this backend. Verify session migrations and Redis first.
+
+The controller saves only these two allowlisted flags in `bluegreen/runtime.json`
+and merges them into replacement backend containers. Unrelated environment values
+and secrets remain intact. Subsequent deployments with `office_evidence=unchanged`
+retain the saved values; changing Compose `.env` files alone does not override them.
+The change takes effect after the replacement backend is healthy and traffic switches.
+If deployment fails, the saved desired flags remain pending for the next deployment.
+Rollback containers retain their original environment; rollback does not rewrite them.
+Select `office_evidence=disabled` on a backend deployment to disable both collection
+features again. This also disables presence/session telemetry collection.
+
+After activation, configure and save the boundary separately for each unit in
+Branch Settings. Employees check their assigned unit from My Sessions. Global
+activation does not automatically create a boundary or request browser location.
+No database migration is introduced by this configuration change.
+
 Repository secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, optional `VPS_PORT`,
 and `GH_PAT` for the private source checkouts. The verified host-key fingerprint
 is stored in the repository variable `VPS_HOST_FINGERPRINT`.

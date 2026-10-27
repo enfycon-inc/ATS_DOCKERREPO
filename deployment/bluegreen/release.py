@@ -431,10 +431,32 @@ class Controller:
         if shutil.disk_usage(self.root).free < 3 * 1024**3:
             raise RuntimeError('Insufficient disk headroom; active release unchanged')
 
+    def configure_office_evidence(self, mode):
+        if mode not in ('enabled', 'disabled'):
+            raise ValueError('Office evidence must be enabled or disabled')
+        value = 'true' if mode == 'enabled' else 'false'
+        self.config['backend_feature_flags'] = {
+            'USER_MANAGEMENT_TELEMETRY_ENABLED': value,
+            'USER_OFFICE_EVIDENCE_ENABLED': value,
+        }
+        atomic(self.home / 'runtime.json', self.config)
+        print('Office evidence configuration saved: ' + mode + '; applied to the next backend container')
+
+    def backend_environment(self):
+        values = dict(item.split('=', 1) for item in self.config['templates']['backend']['Config']['Env'])
+        flags = self.config.get('backend_feature_flags', {})
+        allowed = {'USER_MANAGEMENT_TELEMETRY_ENABLED', 'USER_OFFICE_EVIDENCE_ENABLED'}
+        if not isinstance(flags, dict) or any(key not in allowed or value not in ('true', 'false') for key, value in flags.items()):
+            raise ValueError('Invalid backend feature flag configuration')
+        values.update(flags)
+        return values
+
     def clone(self, service, record, image, backend=None, parser=None):
         template = self.config['templates'][service]
         name = 'ats-release-' + record['id'] + '-' + service
         values = dict(item.split('=', 1) for item in template['Config']['Env'])
+        if service == 'backend':
+            values = self.backend_environment()
         if backend:
             values['INTERNAL_API_URL'] = 'http://' + backend + ':5000'
         if parser:
@@ -609,7 +631,7 @@ class Controller:
                         raise RuntimeError('An applied migration was changed: ' + name)
                 else:
                     validate_additive_migration(path.read_text(), name)
-            values = dict(item.split('=',1) for item in self.config['templates']['backend']['Config']['Env'])
+            values = self.backend_environment()
             values.update(CHECKPOINT_DISABLE='1', PRISMA_HIDE_UPDATE_MESSAGE='1')
             env = folder / 'migration.env'
             atomic(env, '\n'.join(k+'='+v for k,v in values.items())+'\n')
@@ -1479,6 +1501,9 @@ def main():
         controller.initialize()
         controller.recover()
         if action in ('deploy', 'bootstrap'):
+            office_evidence = os.environ.get('OFFICE_EVIDENCE_MODE', 'unchanged')
+            if office_evidence != 'unchanged':
+                controller.configure_office_evidence(office_evidence)
             controller.prepare_router()
             requested = json.loads(os.environ.get('DEPLOY_IMAGES', '{}'))
             controller.deploy(os.environ['RELEASE_ID'], requested)
