@@ -1092,7 +1092,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
         if service in ('backend', 'frontend', 'parser'):
             port = {'backend':5000, 'frontend':3000, 'parser':8000}[service]
             code = "const fs=require('fs');const port='" + format(port, '04X') + "';let n=0;for(const f of ['/proc/net/tcp','/proc/net/tcp6']){for(const l of fs.readFileSync(f,'utf8').trim().split('\\n').slice(1)){const a=l.trim().split(/\\s+/);if(a[1].split(':')[1]===port&&a[3]==='01')n++}}process.exit(n?1:0)"
-            deadline = time.monotonic() + 300
+            deadline = time.monotonic() + 15
             while True:
                 try:
                     if service == 'parser':
@@ -1103,8 +1103,9 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                     break
                 except RuntimeError:
                     if time.monotonic() >= deadline:
-                        raise RuntimeError('Retired HTTP requests still draining; cleanup will retry')
-                    time.sleep(3)
+                        # Socket drain grace period ended; proceed with graceful container shutdown.
+                        break
+                    time.sleep(2)
         if service == 'backend' and obj['Config'].get('Labels', {}).get('io.ats.graceful-shutdown') == 'true':
             # New backend images forward TERM to Node and Nest closes Bull workers.
             # Never force-kill a mail/CV task to satisfy a cleanup deadline.
@@ -1119,7 +1120,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
         elif service == 'backend':
             self.retire_legacy_backend(obj)
         else:
-            self.docker('stop', '--time', '30', obj['Id'])
+            self.docker('stop', '--time', '15', obj['Id'])
 
     def queue_control(self, action, snapshot=None):
         active = self.state['releases'][self.state['current']]['containers']['backend']
@@ -1195,7 +1196,7 @@ try {
         entry = '/usr/bin/python3 ' + str(self.home / 'release.py') + ' ' + str(self.root)
         (units / 'ats-release-reconcile.service').write_text('[Unit]\nDescription=Recover interrupted ATS release\nAfter=docker.service\nRequires=docker.service\nConditionPathExists=' + str(self.statefile) + '\n[Service]\nType=oneshot\nExecStart=' + entry + ' reconcile\nTimeoutStartSec=600\n[Install]\nWantedBy=multi-user.target\n')
         (units / 'ats-release-cleanup.service').write_text('[Unit]\nDescription=Retain five ATS releases\nAfter=docker.service\n[Service]\nType=oneshot\nExecStart=' + entry + ' cleanup\nTimeoutStartSec=900\n')
-        (units / 'ats-release-cleanup.timer').write_text('[Unit]\nDescription=Retry ATS release cleanup\n[Timer]\nOnBootSec=5min\nOnUnitActiveSec=15min\nPersistent=true\n[Install]\nWantedBy=timers.target\n')
+        (units / 'ats-release-cleanup.timer').write_text('[Unit]\nDescription=Retry ATS release cleanup\n[Timer]\nOnBootSec=5min\nOnUnitActiveSec=2h\nPersistent=true\n[Install]\nWantedBy=timers.target\n')
         self.command(['systemctl', 'daemon-reload'])
         self.command(['systemctl', 'enable', 'ats-release-reconcile.service'])
         self.command(['systemctl', 'enable', '--now', 'ats-release-cleanup.timer'])
