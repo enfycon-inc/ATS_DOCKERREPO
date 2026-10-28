@@ -58,6 +58,7 @@ jobs:
       build_backend: ${{ steps.changes.outputs.backend }}
       build_frontend: ${{ steps.changes.outputs.frontend }}
       build_parser: ${{ steps.changes.outputs.parser }}
+      no_service_changes: ${{ steps.changes.outputs.no_service_changes }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -135,6 +136,7 @@ jobs:
           BUILD_BACKEND=false
           BUILD_FRONTEND=false
           BUILD_PARSER=false
+          OTHER_FILES=false
 
           while IFS= read -r file; do
             case "$file" in
@@ -147,13 +149,25 @@ jobs:
               resume-parser-main/*|deployment/production/Dockerfile.parser|deployment/production/parser-*)
                 BUILD_PARSER=true
                 ;;
+              .github/workflows/*)
+                ;;
+              deployment/bluegreen/*)
+                ;;
+              *)
+                OTHER_FILES=true
+                ;;
             esac
           done <<< "$CHANGED_FILES"
 
           if [ "$BUILD_BACKEND" = false ] && [ "$BUILD_FRONTEND" = false ] && [ "$BUILD_PARSER" = false ]; then
-            echo "No service-specific files modified. Defaulting to backend and frontend."
-            BUILD_BACKEND=true
-            BUILD_FRONTEND=true
+            if [ "$OTHER_FILES" = false ]; then
+              echo "Workflow-only change. Production build and release will be skipped."
+              echo "no_service_changes=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "No service-specific files modified. Defaulting to backend and frontend."
+              BUILD_BACKEND=true
+              BUILD_FRONTEND=true
+            fi
           fi
 
           echo "Detected service build flags:"
@@ -167,7 +181,7 @@ jobs:
   build:
     name: Build ${{ matrix.tag }}
     needs: verify
-    if: github.ref == 'refs/heads/main' && (!inputs.operation || inputs.operation == 'deploy') && !inputs.existing_release
+    if: github.ref == 'refs/heads/main' && (!inputs.operation || inputs.operation == 'deploy') && !inputs.existing_release && needs.verify.outputs.no_service_changes != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

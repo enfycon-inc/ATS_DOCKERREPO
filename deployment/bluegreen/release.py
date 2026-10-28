@@ -276,7 +276,14 @@ def validate_additive_migration(sql, migration_name=None):
     )
     if (migration_name == job_export_migration or job_export_marker in sql) and not reviewed_job_export:
         raise RuntimeError(context + 'job export grant differs from the approved permission changes')
-    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export):
+    candidate_ctc_migration = '20261028120000_candidate_latest_ctc_units'
+    reviewed_candidate_ctc = (
+        migration_name == candidate_ctc_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest() == '28264a0c982466eea8b20850d934a33cf22732175c846e04dd42939aec794274'
+    )
+    if migration_name == candidate_ctc_migration and not reviewed_candidate_ctc:
+        raise RuntimeError(context + 'candidate CTC metadata migration differs from the reviewed additive columns and conservative backfill')
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export or reviewed_candidate_ctc):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
