@@ -28,6 +28,7 @@ memory/
 /scratch
 /testing_scripts
 /Diagnostic
-/deployment
+
 .tmp-release-tests
 /docs/
+/deployment
