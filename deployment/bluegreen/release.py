@@ -458,12 +458,27 @@ class Controller:
         values.update(flags)
         return values
 
+    def backend_proxy_environment(self, values):
+        if self.config.get('caddy') and self.config.get('router'):
+            trusted = [item.strip() for item in values.get('TRUSTED_PROXY_CIDRS', '').split(',') if item.strip()]
+            for proxy in (self.config['caddy'], 'ats-release-router'):
+                network = self.inspect(proxy)['NetworkSettings']['Networks'][self.config['network']]
+                addresses = [network.get('IPAddress'), network.get('GlobalIPv6Address')]
+                if not any(addresses):
+                    raise RuntimeError('Trusted ingress address unavailable; review proxy network configuration')
+                for address in filter(None, addresses):
+                    ip = ipaddress.ip_address(address)
+                    trusted.append(str(ip) + ('/32' if ip.version == 4 else '/128'))
+            values['TRUSTED_PROXY_CIDRS'] = ','.join(dict.fromkeys(trusted))
+        return values
+
     def clone(self, service, record, image, backend=None, parser=None):
         template = self.config['templates'][service]
         name = 'ats-release-' + record['id'] + '-' + service
         values = dict(item.split('=', 1) for item in template['Config']['Env'])
         if service == 'backend':
             values = self.backend_environment()
+            values = self.backend_proxy_environment(values)
         if backend:
             values['INTERNAL_API_URL'] = 'http://' + backend + ':5000'
         if parser:

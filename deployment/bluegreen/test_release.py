@@ -14,6 +14,20 @@ spec.loader.exec_module(release)
 
 
 class OfficeEvidenceConfigurationTests(unittest.TestCase):
+    def test_trusted_ingress_uses_exact_container_addresses_and_preserves_explicit_proxies(self):
+        self.controller.config.update(caddy='ingress', router={'id': 'router-image'}, network='ats')
+        addresses = {'ingress': '172.18.0.2', 'ats-release-router': '172.18.0.3'}
+        self.controller.inspect = lambda name: {'NetworkSettings': {'Networks': {'ats': {'IPAddress': addresses[name]}}}}
+        values = self.controller.backend_proxy_environment({'TRUSTED_PROXY_CIDRS': '192.0.2.1/32', 'SECRET': 'unchanged'})
+        self.assertEqual(values['TRUSTED_PROXY_CIDRS'], '192.0.2.1/32,172.18.0.2/32,172.18.0.3/32')
+        self.assertEqual(values['SECRET'], 'unchanged')
+
+    def test_missing_ingress_address_fails_closed(self):
+        self.controller.config.update(caddy='ingress', router={'id': 'router-image'}, network='ats')
+        self.controller.inspect = lambda name: {'NetworkSettings': {'Networks': {'ats': {'IPAddress': ''}}}}
+        with self.assertRaises(RuntimeError):
+            self.controller.backend_proxy_environment({})
+
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)

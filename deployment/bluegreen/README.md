@@ -67,6 +67,23 @@ instead of being overwritten by an older ATS routing snapshot.
 
 ## Prerequisites and limits
 
+### Client IP forwarding
+
+Replacement backend containers trust the exact current Caddy and blue/green router
+addresses on the configured private Docker network (`/32` for IPv4, `/128` for IPv6),
+in addition to explicitly configured trusted upstream proxies. Addresses are inspected
+for each new container, not hardcoded or expanded to the entire private subnet.
+Ingress must overwrite/append forwarding headers correctly and prevent untrusted
+direct backend access. If either controlled proxy has no usable address, deployment
+fails rather than silently broadening trust.
+
+Server-side Next.js authentication calls currently do not carry verified browser
+source information. Their private transport addresses are treated as unavailable
+public-IP evidence. Subsequent authenticated browser API calls can record the
+verified public source through the trusted ingress. This does not retrospectively
+establish a historical login's IP. Old internal observations remain in storage but
+are excluded from public office suggestions and public-IP detail/export fields.
+
 ### Enable office evidence and presence collection
 
 In GitHub Actions, run the production workflow with `operation=deploy`,
