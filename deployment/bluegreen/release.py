@@ -205,6 +205,18 @@ def validate_additive_migration(sql, migration_name=None):
     reviewed_ownership = ownership_marker in sql and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest() == 'b13ccd1474da99f17cef3224b7fe09ef6adc039466f0052fa5f9ba2a0875ea1a'
     if ownership_marker in sql and not reviewed_ownership:
         raise RuntimeError(context + 'submission ownership migration differs from the approved permission changes')
+    # Approved source-attribution migration: preserve the legacy recruiter marker
+    # during blue/green rollback, backfill origin, and allow null recruiter IDs.
+    submission_origin_migration = '20261030100000_submission_origin'
+    submission_origin_marker = '-- ATS: reviewed-submission-origin'
+    reviewed_submission_origin = (
+        migration_name == submission_origin_migration
+        and submission_origin_marker in sql
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == 'f06761aa86c939ca485a5f987881ec028402a997f6d4ec47fb39435729ecba25'
+    )
+    if (migration_name == submission_origin_migration or submission_origin_marker in sql) and not reviewed_submission_origin:
+        raise RuntimeError(context + 'submission origin migration differs from the approved backfill and nullable recruiter attribution change')
     if '-- ATS: permission-grant ACCOUNT_MANAGER job:assign_pod' in sql and not reviewed_pod_permission_grant:
         raise RuntimeError(context + 'reviewed permission grant does not match its approved Account Manager pod grant')
     if '-- ATS: permission-grant ACCOUNT_MANAGER job:grant_creation_delegate' in sql and not reviewed_job_creation_permission_grant:
@@ -283,7 +295,7 @@ def validate_additive_migration(sql, migration_name=None):
     )
     if migration_name == candidate_ctc_migration and not reviewed_candidate_ctc:
         raise RuntimeError(context + 'candidate CTC metadata migration differs from the reviewed additive columns and conservative backfill')
-    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export or reviewed_candidate_ctc):
+    if changes_data and not (reviewed_permission_grant or reviewed_ownership or reviewed_submission_origin or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export or reviewed_candidate_ctc):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
