@@ -13,6 +13,28 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
 
+class ClientBillRateMigrationTests(unittest.TestCase):
+    def test_bill_rate_grants_accept_only_reviewed_content_and_identity(self):
+        root = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations'
+        for name in ('20261031150000_account_manager_client_bill_rate',
+                     '20261031160000_admin_delivery_client_bill_rate'):
+            sql = (root / name / 'migration.sql').read_text()
+            with self.subTest(name=name):
+                release.validate_additive_migration(sql, name)
+                release.validate_additive_migration(sql.replace('\n', '\r\n'), name)
+            for altered, identity in (
+                (sql, 'unreviewed_grant'),
+                (sql.replace('job:bill_rate:view', 'tenant:manage'), name),
+                (sql.replace('ACCOUNT_MANAGER', 'RECRUITER').replace('DELIVERY_HEAD', 'RECRUITER'), name),
+                (sql.replace('AND cr.is_system = true', ''), name),
+                (sql.replace('COMMIT;', ''), name),
+                (sql.replace("SET LOCAL lock_timeout = '5s';", ''), name),
+            ):
+                with self.subTest(name=name, identity=identity, sql=altered):
+                    with self.assertRaises(RuntimeError):
+                        release.validate_additive_migration(altered, identity)
+
+
 class OfficeEvidenceConfigurationTests(unittest.TestCase):
     def test_trusted_ingress_uses_exact_container_addresses_and_preserves_explicit_proxies(self):
         self.controller.config.update(caddy='ingress', router={'id': 'router-image'}, network='ats')
