@@ -500,6 +500,17 @@ COMMIT;
                     prefix.replace("SET LOCAL lock_timeout = '5s';",'')+'SELECT 1; COMMIT;']:
             with self.assertRaises(RuntimeError):release.validate_additive_migration(sql)
 
+    def test_default_presence_migration_accepts_only_reviewed_identity_and_content(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261102090000_default_presence_all_roles/migration.sql'
+        sql = migration.read_text().replace('\r\n', '\n')
+        release.validate_additive_migration(sql, migration.parent.name)
+        for name in (None, 'another_migration'):
+            with self.assertRaisesRegex(RuntimeError, 'data-changing migration needs separate review'):
+                release.validate_additive_migration(sql, name)
+        changed = sql.replace('user:presence:view', 'user:manage')
+        with self.assertRaisesRegex(RuntimeError, 'default presence migration differs from the approved'):
+            release.validate_additive_migration(changed, migration.parent.name)
+
     def test_submission_ownership_marker_cannot_approve_arbitrary_writes(self):
         sql = "-- ATS: rollback-compatible\n-- ATS: reviewed-submission-role-ownership\nBEGIN;\nSET LOCAL lock_timeout = '5s';\nUPDATE ats.custom_roles SET permissions = '[\"*\"]'::jsonb;\nCOMMIT;\n"
         with self.assertRaisesRegex(RuntimeError, 'differs from the approved'):

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="680" viewBox="0 0 1440 680" role="img" aria-labelledby="title desc">
+ <title id="title">Role-aware submission table pay and client rate preview</title>
+ <desc id="desc">Delivery leads and account managers with placement view can see commission. Recruiters see numeric client bill rate only and no commission column.</desc>
+ <rect width="1440" height="680" rx="16" fill="#f8fafc"/>
+ <text x="38" y="40" font-family="Arial,sans-serif" font-size="21" font-weight="700" fill="#162033">All Submissions · Design preview</text>
+ <g font-family="Arial,sans-serif" font-size="13" fill="#173a70"><rect x="38" y="56" width="86" height="32" rx="7" fill="#eaf2ff" stroke="#9bbcff"/><text x="58" y="77" font-weight="700">All 470</text><rect x="124" y="56" width="138" height="32" fill="#fff" stroke="#dbe2ea"/><text x="140" y="77">Needs review 403</text><rect x="262" y="56" width="116" height="32" fill="#fff" stroke="#dbe2ea"/><text x="278" y="77">Interviews 52</text><rect x="378" y="56" width="96" height="32" fill="#fff" stroke="#dbe2ea"/><text x="395" y="77">Offers 2</text><rect x="474" y="56" width="106" height="32" fill="#fff" stroke="#dbe2ea"/><text x="490" y="77">Closures 1</text><rect x="580" y="56" width="96" height="32" fill="#fff" stroke="#dbe2ea"/><text x="598" y="77">Closed 12</text></g>
+ <text x="38" y="121" font-family="Arial,sans-serif" font-size="14" font-weight="700" fill="#334155">Delivery Head / Account Manager · has placement:view</text>
+ <rect x="30" y="134" width="1380" height="220" rx="10" fill="#fff" stroke="#dbe2ea"/>
+ <rect x="30" y="134" width="1380" height="42" fill="#f1f5f9"/>
+ <g font-family="Arial,sans-serif" font-size="11" font-weight="700" letter-spacing=".35" fill="#52627a"><text x="48" y="160">JOB</text><text x="302" y="160">CANDIDATE</text><text x="500" y="160">PAY DETAILS</text><text x="760" y="160">CLIENT BILL RATE</text><text x="1018" y="160">COMMISSION</text><text x="1220" y="160">CURRENT STATUS</text></g>
+ <g stroke="#e2e8f0"><path d="M30 176H1410M30 265H1410M30 354H1410"/><path d="M282 134V354M480 134V354M740 134V354M998 134V354M1198 134V354"/></g>
+ <g font-family="Arial,sans-serif" fill="#162033">
+  <text x="48" y="204" font-size="13" font-weight="700">SAP FICO Consultant</text><rect x="48" y="213" width="65" height="18" rx="4" fill="#eef4ff"/><text x="58" y="226" font-size="10" fill="#1a4fa0">Full time</text><text x="48" y="249" font-size="11" fill="#64748b">ENFY-IND-261030-014</text>
+  <text x="302" y="209" font-size="13" font-weight="700" fill="#1a4fa0">Manmadha KB</text><text x="302" y="228" font-size="11" fill="#64748b">madhu...@gmail.com</text>
+  <text x="500" y="199" font-size="10" font-weight="700" fill="#64748b">CURRENT</text><text x="574" y="199" font-size="12" font-weight="600">INR 12 LPA</text><text x="500" y="224" font-size="10" font-weight="700" fill="#64748b">EXPECTED</text><text x="574" y="224" font-size="12" font-weight="600">INR 15.5 LPA</text>
+  <text x="760" y="213" font-size="12" fill="#64748b">—</text><text x="1018" y="208" font-size="12" font-weight="600">8.33% placement</text><text x="1018" y="227" font-size="11" fill="#64748b">commission</text>
+  <rect x="1214" y="197" width="150" height="25" rx="12" fill="#fff7e6"/><text x="1227" y="214" font-size="10.5" fill="#a65300">◷ Needs review</text>
+  <text x="48" y="293" font-size="13" font-weight="700">Java React</text><rect x="48" y="302" width="60" height="18" rx="4" fill="#ecfdf5"/><text x="58" y="315" font-size="10" fill="#047857">Contract</text><text x="48" y="338" font-size="11" fill="#64748b">ENFY-IND-261029-024</text>
+  <text x="302" y="298" font-size="13" font-weight="700" fill="#1a4fa0">Shruti Wali</text><text x="302" y="317" font-size="11" fill="#64748b">shruti...@gmail.com</text>
+  <text x="500" y="288" font-size="10" font-weight="700" fill="#64748b">CURRENT</text><text x="574" y="288" font-size="12" font-weight="600">INR 45,000 / month</text><text x="500" y="313" font-size="10" font-weight="700" fill="#64748b">EXPECTED</text><text x="574" y="313" font-size="12" font-weight="600">INR 60,000 / month</text>
+  <text x="760" y="300" font-size="12" font-weight="600">INR 85,000 / month</text><text x="1018" y="300" font-size="12" fill="#64748b">—</text>
+  <rect x="1214" y="286" width="150" height="25" rx="12" fill="#fff7e6"/><text x="1227" y="303" font-size="10.5" fill="#a65300">◷ Needs review</text>
+ </g>
+ <text x="38" y="386" font-family="Arial,sans-serif" font-size="14" font-weight="700" fill="#334155">Recruiter · bill-rate access, no placement:view</text>
+ <rect x="30" y="399" width="1380" height="218" rx="10" fill="#fff" stroke="#dbe2ea"/>
+ <rect x="30" y="399" width="1380" height="42" fill="#f1f5f9"/>
+ <g font-family="Arial,sans-serif" font-size="11" font-weight="700" letter-spacing=".35" fill="#52627a"><text x="48" y="425">JOB</text><text x="302" y="425">CANDIDATE</text><text x="500" y="425">PAY DETAILS</text><text x="760" y="425">CLIENT BILL RATE</text><text x="1070" y="425">PIPELINE</text><text x="1250" y="425">CURRENT STATUS</text></g>
+ <g stroke="#e2e8f0"><path d="M30 441H1410M30 529H1410M30 617H1410"/><path d="M282 399V617M480 399V617M740 399V617M1048 399V617M1228 399V617"/></g>
+ <g font-family="Arial,sans-serif" fill="#162033">
+  <text x="48" y="469" font-size="13" font-weight="700">SAP FICO Consultant</text><rect x="48" y="478" width="65" height="18" rx="4" fill="#eef4ff"/><text x="58" y="491" font-size="10" fill="#1a4fa0">Full time</text><text x="48" y="515" font-size="11" fill="#64748b">ENFY-IND-261030-014</text>
+  <text x="302" y="474" font-size="13" font-weight="700" fill="#1a4fa0">Manmadha KB</text><text x="302" y="493" font-size="11" fill="#64748b">madhu...@gmail.com</text>
+  <text x="500" y="460" font-size="10" font-weight="700" fill="#64748b">CURRENT</text><text x="574" y="460" font-size="12" font-weight="600">INR 12 LPA</text><text x="500" y="485" font-size="10" font-weight="700" fill="#64748b">EXPECTED</text><text x="574" y="485" font-size="12" font-weight="600">INR 15.5 LPA</text>
+  <text x="760" y="478" font-size="12" fill="#64748b">—</text><text x="1070" y="477" font-size="12" fill="#64748b">Internal review → L1</text><rect x="1244" y="462" width="140" height="25" rx="12" fill="#fff7e6"/><text x="1258" y="479" font-size="10.5" fill="#a65300">Needs review</text>
+  <text x="48" y="557" font-size="13" font-weight="700">Java React</text><rect x="48" y="566" width="60" height="18" rx="4" fill="#ecfdf5"/><text x="58" y="579" font-size="10" fill="#047857">Contract</text><text x="48" y="603" font-size="11" fill="#64748b">ENFY-IND-261029-024</text>
+  <text x="302" y="562" font-size="13" font-weight="700" fill="#1a4fa0">Shruti Wali</text><text x="302" y="581" font-size="11" fill="#64748b">shruti...@gmail.com</text>
+  <text x="500" y="548" font-size="10" font-weight="700" fill="#64748b">CURRENT</text><text x="574" y="548" font-size="12" font-weight="600">INR 45,000 / month</text><text x="500" y="573" font-size="10" font-weight="700" fill="#64748b">EXPECTED</text><text x="574" y="573" font-size="12" font-weight="600">INR 60,000 / month</text>
+  <text x="760" y="566" font-size="12" font-weight="600">INR 85,000 / month</text><text x="1070" y="565" font-size="12" fill="#64748b">Internal review → L1</text><rect x="1244" y="550" width="140" height="25" rx="12" fill="#fff7e6"/><text x="1258" y="567" font-size="10.5" fill="#a65300">Needs review</text>
+ </g>
+ <text x="38" y="650" font-family="Arial,sans-serif" font-size="11" fill="#64748b">Recruiters see numeric bill rates only. Commission-only terms are omitted; no commission percentage is returned in their API response.</text>
+</svg>

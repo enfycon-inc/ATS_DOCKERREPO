@@ -1,0 +1,45 @@
+# System Design Proposal - Active Users Presence and Manager Controls
+
+## Current Architecture Context
+- The active-users endpoint already returns approved users with access enabled, manager name, permission-gated presence, and `lastSeenAt`. Presence is batched from Redis; the list is paginated and refreshes every 30 seconds for users with `user:presence:view`.
+- Presence is classified as Online (`active`), Away, Offline, or Unknown. Redis heartbeats track latest `seen` and latest `active` signal. The directory's existing `lastSeenAt` comes from the latest session-membership checkpoint, persisted at most about once per minute during session activity.
+- The Active Users view currently repeats the obvious account status in a column, shows a `Columns` control and `Updated` timestamp, always displays `Reset filters`, and shows inline `Assign` even when a manager is already assigned. Unassigned rows display redundant `Unassigned` text. The row action menu currently offers `Assign Manager` only.
+- Rows can be selected, but the page only displays a selected count; there is no bulk action bar. A bulk manager assignment client method already exists. Status changes, session revocation, and profile/city edits currently have individual-user API methods.
+- Manager assignment edits already use the directory editor and submit `jobReviewerId`; the backend explicitly converts null/empty values to a null manager ID. The existing scoped `assignManager` permission remains the authorization boundary.
+- `user:presence:view` already exists, but the standard Delivery Head, Unit Admin, Branch Admin, Tenant Admin and Super Admin role templates do not all include it by default.
+
+## Proposed Solution
+1. **Presence:** Keep Online/Away/Offline/Unknown badges and show `Last active · [relative time]` beneath each badge (for example, `Last active · 4 min ago`). Derive relative time from the existing `lastSeenAt` field and refresh it with the existing directory refresh. Add a full local timestamp in the tooltip/accessibility label. This is the latest recorded authenticated session activity checkpoint, with roughly one-minute update precision; it is not a keystroke-level activity monitor. Preserve Unknown when telemetry is unavailable.
+2. **Manager cell:** Show the assigned manager name without an inline control when a manager exists. For an unassigned user, leave the manager text area blank and show only inline `+ Assign` when the actor has `assignManager` authority; do not render `Unassigned`. For unassigned users, retain `Assign Manager` in the action menu as an alternate entry point. For assigned users, show `Change Manager` and `Unassign Manager` in the action menu, both gated by the same existing permission. `Unassign Manager` saves `jobReviewerId: null`, which the existing backend explicitly persists as no designated manager. In the shared editor, label this choice `Unassigned` (rather than the potentially confusing `Auto (Hierarchy)`).
+3. **Active Users columns and controls:** Remove the redundant Account status column from this view, and remove the `Columns` selector and `Updated [time]` label from its filter/action bar. Keep the `Refresh` button and the existing search, city, and role filters.
+4. **Reset filters:** Render `Reset filters` only when at least one actual filter is selected: non-empty search, city other than all cities, or role other than all roles. Do not count page number, page size, or sort order as filters. Reset clears only filter values and returns to page 1.
+5. **Bulk actions:** When one or more eligible user rows are selected, show the selected count and a single bulk `Actions` button using the same ellipsis/dropdown treatment as the job table. Put only authorized bulk operations in that menu: `Deactivate/Block access` for active selections (with the existing required reason flow), `Activate` for blocked selections, `Assign manager` for selections when `assignManager` is allowed, `Revoke sessions` when session-revocation authority is allowed, and `Change city` when profile-edit authority is allowed. Include `Clear selection` beside the action button. Since Active Users contains active accounts only, it offers Deactivate/Block access, manager assignment, session revocation, and city change; Activate appears on Blocked Users. Use page-scoped selection as indicated in the screenshot/current table behavior; do not imply that selection includes unloaded pages. For mixed status selections if later enabled, offer each applicable status operation and clearly describe which selected users it affects.
+6. **Bulk operation behavior:** Use the existing bulk manager assignment API. Add permission-checked bulk endpoints for account status changes, session revocation, and city updates rather than issuing N individual requests from the browser. Validate each target against tenant/branch/unit scope server-side, process atomically per operation where practical, return per-user success/failure results, and clear selection/refresh the table after success. Deactivation requires a reason; session revocation should clearly distinguish sessions for inactive accounts. Show partial failures in an in-page result/error panel, consistent with the user's no-toast preference.
+7. **Permission defaults:** Add `user:presence:view` to the standard Delivery Head and higher role templates (Delivery Head, Unit Admin, Branch Admin, Tenant Admin, Super Admin), using the existing idempotent role-template seeding/backfill path. Custom roles continue to require explicit permission grants.
+
+## Security & Performance Audit
+- **Authorization:** Continue checking `user:presence:view` server-side before returning presence data. Manager mutations remain guarded by `assignManager`; hiding a button is not an authorization check.
+- **Tenant and organization scope:** Keep the existing management scope on directory rows, presence IDs, and manager options. Do not fetch presence for users outside the current paginated result.
+- **Data minimization:** Show only presence and last-activity time in the compact status cell. Network observation details remain governed by their separate permission and are not part of this proposal's UI.
+- **API/DB impact:** No schema migration, new endpoint, or extra request is needed. Existing `lastSeenAt` and manager editor mutation are reused. The existing role permission backfill is an idempotent data update, not a database schema migration.
+- **Bulk API impact:** Manager assignment can reuse the current bulk manager API. Bulk status, session revocation, and city changes need backend bulk routes/handlers, but these are service/API changes only and do not require new tables or schema migration. Each bulk handler must reuse the established single-user validation and scope rules.
+- **Performance:** Preserve one paginated list request, batched Redis presence lookup, and the current 30-second refresh. Relative time is computed client-side. No N+1 calls or indexes are introduced.
+- **Failure behavior:** Unknown stays distinct from Offline if presence telemetry fails. A missing `lastSeenAt` displays `Last active · Not recorded`.
+- **Manager clearing semantics:** Existing backend update logic maps `jobReviewerId: null` or empty to `job_reviewer_id = NULL`; the explicit Unassign action can reuse this path under existing permission and scope checks.
+
+## Edge Cases
+1. A user without recorded activity has a clear Not recorded value, not a fabricated timestamp.
+2. Users who are Offline still show the last recorded activity time when available.
+3. Unknown telemetry does not imply Offline.
+4. If manager assignment changes between load and action, the editor refreshes the directory after a successful mutation and presents any stale-state error in the existing error display.
+5. Custom roles do not inherit presence solely from their role label; the explicit permission remains authoritative.
+6. Hide manager actions when the row is not a user or the actor lacks `assignManager`.
+
+## Implementation Scope
+- `ats_frontend_main/components/users/users-directory.tsx`: active-view columns and controls, conditional Reset filters, last-activity label, assignment-dependent manager cell/menu labels, selected-row bulk action toolbar, and operation summaries.
+- `ats_backend/src/auth/services/auth-init.service.ts`: standard role template/backfill permission update.
+- `ats_backend/src/auth/auth.controller.ts`, `ats_backend/src/auth/services/auth-user.service.ts`, and user-management contracts/API client: add scoped bulk status, session-revocation, and city handlers. Reuse existing `bulkSetJobReviewer` for manager assignment after confirming its per-target scope behavior.
+- No schema change. Keep `lastSeenAt`'s approximately one-minute checkpoint precision visible in product documentation/help text if needed.
+
+## Rollback
+Revert the Active Users view and control-bar changes and remove the permission from standard role templates. The data backfill can be reversed with an idempotent permission-array cleanup if required. No session, user, or job records are modified.

@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
+  <title id="title">Submission table design preview</title>
+  <desc id="desc">EnfySync submissions table with readable account manager and recruiter emails, compact job type badges, short submission progress, and client terms labeled by type.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#0f172a" flood-opacity=".08"/></filter>
+    <style>
+      .ui{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#172033}.muted{fill:#64748b}.small{font-size:12px}.body{font-size:13px}.head{font-size:12px;font-weight:700;letter-spacing:.6px;fill:#52617a}.name{font-size:13px;font-weight:650}.email{font-size:11px;fill:#526b92}.value{font-size:12px;font-weight:600}.label{font-size:10px;font-weight:700;letter-spacing:.4px;fill:#6b7280}
+    </style>
+  </defs>
+  <rect width="1600" height="760" fill="#f6f8fb"/>
+  <rect width="1600" height="44" fill="#1a4fa0"/>
+  <text x="28" y="28" fill="#fff" font-size="17" font-weight="700" class="ui">EnfySync ATS</text>
+  <text x="1435" y="27" fill="#eaf1ff" font-size="12" class="ui">Delivery Head</text>
+  <text x="30" y="82" font-size="20" font-weight="700" class="ui">All Submissions</text>
+  <text x="30" y="107" font-size="12" class="muted ui">Recruitment  ›  All Submissions</text>
+  <rect x="26" y="130" width="1548" height="595" rx="12" fill="#fff" stroke="#dbe2eb" filter="url(#shadow)"/>
+  <g class="ui">
+    <rect x="42" y="148" width="68" height="32" rx="7" fill="#edf4ff" stroke="#8ab4ff"/><text x="65" y="169" class="body" font-weight="700" fill="#1a4fa0">All 470</text>
+    <text x="129" y="169" class="body" font-weight="600">Needs review <tspan fill="#64748b">403</tspan></text>
+    <text x="278" y="169" class="body" font-weight="600">Interviews <tspan fill="#64748b">52</tspan></text>
+    <text x="405" y="169" class="body" font-weight="600">Offers <tspan fill="#64748b">2</tspan></text>
+    <text x="503" y="169" class="body" font-weight="600">Closures <tspan fill="#64748b">1</tspan></text>
+    <text x="611" y="169" class="body" font-weight="600">Closed <tspan fill="#64748b">12</tspan></text>
+    <line x1="26" y1="194" x2="1574" y2="194" stroke="#e2e8f0"/>
+    <text x="48" y="220" class="small muted">Search</text><text x="366" y="220" class="small muted">Account manager</text><text x="600" y="220" class="small muted">Recruiter</text><text x="833" y="220" class="small muted">Stage</text><text x="1066" y="220" class="small muted">Time period</text>
+    <rect x="42" y="230" width="306" height="36" rx="7" fill="#fff" stroke="#d5deea"/><text x="56" y="253" class="body muted">Candidate, job code or client…</text>
+    <rect x="360" y="230" width="222" height="36" rx="7" fill="#fff" stroke="#d5deea"/><text x="374" y="253" class="body">All account managers</text><path d="M560 245l5 5 5-5" fill="none" stroke="#475569" stroke-width="1.5"/>
+    <rect x="594" y="230" width="222" height="36" rx="7" fill="#fff" stroke="#d5deea"/><text x="608" y="253" class="body">All recruiters</text><path d="M794 245l5 5 5-5" fill="none" stroke="#475569" stroke-width="1.5"/>
+    <rect x="828" y="230" width="222" height="36" rx="7" fill="#fff" stroke="#d5deea"/><text x="842" y="253" class="body">All stages</text><path d="M1028 245l5 5 5-5" fill="none" stroke="#475569" stroke-width="1.5"/>
+    <rect x="1062" y="230" width="222" height="36" rx="7" fill="#fff" stroke="#d5deea"/><text x="1076" y="253" class="body">All time</text><path d="M1262 245l5 5 5-5" fill="none" stroke="#475569" stroke-width="1.5"/>
+    <rect x="1298" y="230" width="112" height="36" rx="7" fill="#fff" stroke="#d5deea"/><text x="1321" y="253" class="body">More filters</text>
+    <rect x="42" y="286" width="1516" height="42" fill="#f1f5f9"/>
+    <text x="58" y="312" class="head">JOB</text><text x="334" y="312" class="head">ACCOUNT MANAGER</text><text x="550" y="312" class="head">RECRUITER</text><text x="780" y="312" class="head">CANDIDATE</text><text x="1008" y="312" class="head">PAY DETAILS</text><text x="1270" y="312" class="head">CLIENT TERMS</text><text x="1441" y="312" class="head">PIPELINE</text>
+  </g>
+  <line x1="42" y1="328" x2="1558" y2="328" stroke="#dce3ed"/>
+  <!-- Row one: contract -->
+  <g class="ui">
+    <text x="58" y="356" class="name">AI Data Scientist</text><rect x="190" y="340" width="68" height="21" rx="5" fill="#eff6ff"/><text x="200" y="355" font-size="10.5" font-weight="650" fill="#1e4f91">Contract</text>
+    <text x="58" y="379" class="small muted">ENFY-IND-261030-016</text>
+    <rect x="58" y="391" width="39" height="21" rx="5" fill="#fff7e6"/><text x="67" y="406" font-size="10.5" font-weight="650" fill="#9a5a00">Hot</text>
+    <text x="105" y="406" class="small" fill="#1a4fa0">5th / 50 req</text><text x="197" y="406" class="small muted">· 2 more</text>
+    <circle cx="342" cy="370" r="15" fill="#e8f0fe"/><text x="332" y="374" font-size="9" fill="#1a4fa0" font-weight="700">DR</text>
+    <text x="365" y="363" class="name">DINAKAR RAYAPUREDDY</text><text x="365" y="382" class="email">dinakar.rayapureddy@enfycon.com</text>
+    <circle cx="558" cy="370" r="15" fill="#e8f0fe"/><text x="548" y="374" font-size="9" fill="#1a4fa0" font-weight="700">VR</text>
+    <text x="581" y="363" class="name">Venkatesh Rali</text><text x="581" y="382" class="email">venkatesh.rali@enfycon.com</text>
+    <text x="780" y="360" class="name" fill="#1a4fa0">Manab Kumar Das</text><text x="780" y="380" class="email">manab313@gmail.com</text><text x="780" y="398" class="small muted">+91 96378 48154</text><text x="780" y="416" class="small muted">Bangalore Urban, Karnataka</text>
+    <text x="1008" y="355" class="label">CURRENT MONTHLY PAY</text><text x="1008" y="373" class="value">INR 54,166 / month</text><text x="1008" y="398" class="label">EXPECTED MONTHLY PAY</text><text x="1008" y="416" class="value">INR 83,333 / month</text>
+    <text x="1270" y="374" class="value">INR 1,200 / hour</text>
+    <circle cx="1448" cy="369" r="10" fill="#1a4fa0"/><circle cx="1481" cy="369" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><circle cx="1513" cy="369" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><text x="1436" y="393" font-size="9" fill="#1a4fa0">Review</text><text x="1475" y="393" font-size="9" class="muted">L1</text><text x="1507" y="393" font-size="9" class="muted">L2</text>
+  </g>
+  <line x1="42" y1="442" x2="1558" y2="442" stroke="#e8edf3"/>
+  <!-- Row two: permanent -->
+  <g class="ui">
+    <text x="58" y="470" class="name">Tax Analyst SALT</text><rect x="177" y="454" width="70" height="21" rx="5" fill="#eaf7ee"/><text x="187" y="469" font-size="10.5" font-weight="650" fill="#24723b">Full Time</text>
+    <text x="58" y="493" class="small muted">ENFY-IND-261027-008</text>
+    <rect x="58" y="505" width="48" height="21" rx="5" fill="#fff7e6"/><text x="68" y="520" font-size="10.5" font-weight="650" fill="#9a5a00">Warm</text><text x="114" y="520" class="small" fill="#1a4fa0">3rd / 50 req</text>
+    <circle cx="342" cy="484" r="15" fill="#e8f0fe"/><text x="332" y="488" font-size="9" fill="#1a4fa0" font-weight="700">ST</text><text x="365" y="477" class="name">Suseela Tallamraju</text><text x="365" y="496" class="email">suseela.tallamraju@enfycon.com</text>
+    <circle cx="558" cy="484" r="15" fill="#e8f0fe"/><text x="548" y="488" font-size="9" fill="#1a4fa0" font-weight="700">DB</text><text x="581" y="477" class="name">Deepti Ballanki</text><text x="581" y="496" class="email">deepti.ballanki@enfycon.com</text>
+    <text x="780" y="474" class="name" fill="#1a4fa0">Babita Amadalli</text><text x="780" y="494" class="email">babitaamadalli139@gmail.com</text><text x="780" y="512" class="small muted">+91 90190 63925</text><text x="780" y="530" class="small muted">Bangalore, Karnataka</text>
+    <text x="1008" y="469" class="label">CURRENT CTC</text><text x="1008" y="487" class="value">INR 9 LPA</text><text x="1008" y="512" class="label">EXPECTED CTC</text><text x="1008" y="530" class="value">INR 15 LPA</text>
+    <text x="1270" y="487" class="value">8.33%</text>
+    <circle cx="1448" cy="483" r="10" fill="#1a4fa0"/><circle cx="1481" cy="483" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><circle cx="1513" cy="483" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><text x="1436" y="507" font-size="9" fill="#1a4fa0">Review</text><text x="1475" y="507" font-size="9" class="muted">L1</text><text x="1507" y="507" font-size="9" class="muted">L2</text>
+  </g>
+  <line x1="42" y1="556" x2="1558" y2="556" stroke="#e8edf3"/>
+  <g class="ui"><text x="48" y="592" class="small muted">One value per row: commission percentages or client bill rates with their recorded monthly/hourly unit.</text><text x="48" y="614" class="small muted">Recruiters see bill rates when permitted; placement commissions remain hidden without placement:view.</text>
+    <line x1="42" y1="650" x2="1558" y2="650" stroke="#e2e8f0"/><text x="48" y="686" class="small muted">Showing 1–20 of 470</text><text x="1432" y="686" class="small" fill="#1a4fa0">‹   1   2   3   4   5   ›</text>
+  </g>
+</svg>

@@ -300,7 +300,15 @@ def validate_additive_migration(sql, migration_name=None):
     reviewed_bill_rate = migration_name in bill_rate_grants and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest() == bill_rate_grants[migration_name]
     if migration_name in bill_rate_grants and not reviewed_bill_rate:
         raise RuntimeError(context + 'client bill-rate grant differs from the approved permission changes')
-    if changes_data and not (reviewed_bill_rate or reviewed_permission_grant or reviewed_ownership or reviewed_submission_origin or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export or reviewed_candidate_ctc):
+    presence_default_migration = '20261102090000_default_presence_all_roles'
+    reviewed_presence_default = (
+        migration_name == presence_default_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == 'f87d8d1059239af10c8a848cfca1ac68e211968a637ed4bc0c546b8591b91bf3'
+    )
+    if migration_name == presence_default_migration and not reviewed_presence_default:
+        raise RuntimeError(context + 'default presence migration differs from the approved role permission grant')
+    if changes_data and not (reviewed_bill_rate or reviewed_permission_grant or reviewed_ownership or reviewed_submission_origin or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export or reviewed_candidate_ctc or reviewed_presence_default):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')

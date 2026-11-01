@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="480" viewBox="0 0 1440 480" role="img" aria-labelledby="title desc">
+  <title id="title">All Submissions table preview</title>
+  <desc id="desc">The duplicate Created by column is removed. Account manager remains beside the recruiter column.</desc>
+  <rect width="1440" height="480" rx="16" fill="#f8fafc"/>
+  <rect x="20" y="20" width="1400" height="440" rx="12" fill="#fff" stroke="#dbe2ea"/>
+  <text x="48" y="61" font-family="Arial, sans-serif" font-size="23" font-weight="700" fill="#162033">All Submissions</text>
+  <g font-family="Arial, sans-serif" font-size="14" fill="#173a70">
+    <rect x="48" y="82" width="90" height="36" rx="8" fill="#eaf2ff" stroke="#9bbcff"/><text x="73" y="105" font-weight="700">All 470</text>
+    <rect x="138" y="82" width="150" height="36" fill="#fff" stroke="#dbe2ea"/><text x="154" y="105">Needs review 403</text>
+    <rect x="288" y="82" width="125" height="36" fill="#fff" stroke="#dbe2ea"/><text x="306" y="105">Interviews 52</text>
+    <rect x="413" y="82" width="100" height="36" fill="#fff" stroke="#dbe2ea"/><text x="432" y="105">Offers 2</text>
+    <rect x="513" y="82" width="110" height="36" fill="#fff" stroke="#dbe2ea"/><text x="532" y="105">Closures 1</text>
+    <rect x="623" y="82" width="100" height="36" fill="#fff" stroke="#dbe2ea"/><text x="642" y="105">Closed 12</text>
+  </g>
+  <rect x="36" y="136" width="1368" height="54" fill="#f1f5f9"/>
+  <g font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing=".4" fill="#52627a">
+    <text x="54" y="168">JOB REFERENCE</text><text x="300" y="168">ACCOUNT MANAGER</text><text x="495" y="168">RECRUITER</text><text x="690" y="168">CANDIDATE</text><text x="942" y="168">PIPELINE</text><text x="1198" y="168">CURRENT STATUS</text><text x="1334" y="168">ACTIONS</text>
+  </g>
+  <g stroke="#e2e8f0"><path d="M36 190H1404M36 280H1404M36 370H1404"/><path d="M280 136V460M475 136V460M670 136V460M920 136V460M1170 136V460M1320 136V460"/></g>
+  <g font-family="Arial, sans-serif" fill="#162033">
+    <text x="54" y="222" font-size="15" font-weight="700">SAP FICO Consultant</text><text x="54" y="247" font-size="13" fill="#64748b">ENFY-IND-261030-014  ·  Warm</text>
+    <circle cx="307" cy="235" r="17" fill="#eaf2ff"/><text x="299" y="240" font-size="11" fill="#1a4fa0">DR</text><text x="334" y="231" font-size="14" font-weight="700">DINAKAR RAYAP...</text><text x="334" y="251" font-size="12" fill="#64748b">dinakar.rayapureddy@...</text>
+    <circle cx="502" cy="235" r="17" fill="#eaf2ff"/><text x="494" y="240" font-size="11" fill="#1a4fa0">SJ</text><text x="529" y="231" font-size="14" font-weight="700">Sridivya Jakk... </text><text x="529" y="251" font-size="12" fill="#64748b">sridivya.jakkuva@...</text>
+    <text x="690" y="229" font-size="15" font-weight="700" fill="#1a4fa0">Manmadha KB</text><text x="690" y="250" font-size="12" fill="#64748b">madhu...@gmail.com</text>
+    <rect x="945" y="220" width="18" height="18" rx="9" fill="#1a4fa0"/><path d="M963 229h34m0 0h34m0 0h34m0 0h34" stroke="#cbd5e1" stroke-width="3"/><circle cx="997" cy="229" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><circle cx="1031" cy="229" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><circle cx="1065" cy="229" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><circle cx="1099" cy="229" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="1187" y="218" width="120" height="28" rx="14" fill="#fff7e6"/><text x="1200" y="237" font-size="12" fill="#a65300">◷ Needs review</text><text x="1345" y="238" font-size="20">···</text>
+    <text x="54" y="312" font-size="15" font-weight="700">Java React</text><text x="54" y="337" font-size="13" fill="#64748b">ENFY-IND-261029-024  ·  Warm</text>
+    <circle cx="307" cy="325" r="17" fill="#eaf2ff"/><text x="299" y="330" font-size="11" fill="#1a4fa0">DB</text><text x="334" y="321" font-size="14" font-weight="700">Deepti Ballanki</text><text x="334" y="341" font-size="12" fill="#64748b">deepti.ballanki@enfy...</text>
+    <circle cx="502" cy="325" r="17" fill="#eaf2ff"/><text x="494" y="330" font-size="11" fill="#1a4fa0">HC</text><text x="529" y="321" font-size="14" font-weight="700">Haripriya Ch...</text><text x="529" y="341" font-size="12" fill="#64748b">haripriya.ch@enfy...</text>
+    <text x="690" y="319" font-size="15" font-weight="700" fill="#1a4fa0">Shruti Wali</text><text x="690" y="340" font-size="12" fill="#64748b">shruti...@gmail.com</text>
+    <rect x="945" y="310" width="18" height="18" rx="9" fill="#1a4fa0"/><path d="M963 319h34m0 0h34m0 0h34m0 0h34" stroke="#cbd5e1" stroke-width="3"/><circle cx="997" cy="319" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><circle cx="1031" cy="319" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><circle cx="1065" cy="319" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/><circle cx="1099" cy="319" r="9" fill="#fff" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="1187" y="308" width="120" height="28" rx="14" fill="#fff7e6"/><text x="1200" y="327" font-size="12" fill="#a65300">◷ Needs review</text><text x="1345" y="328" font-size="20">···</text>
+  </g>
+  <text x="48" y="434" font-family="Arial, sans-serif" font-size="12" fill="#64748b">Same row data; one identity column removed. Account manager stays visible for ownership.</text>
+</svg>
