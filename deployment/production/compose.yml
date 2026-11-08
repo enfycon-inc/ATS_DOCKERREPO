@@ -76,6 +76,8 @@ services:
     env_file: [.env.backend]
     environment:
       NODE_ENV: production
+      RESUME_STORAGE_DIR: /app/uploads/resumes
+      RESUME_STORAGE_REQUIRE_MOUNT: "true"
       PORT: "5000"
       NODE_OPTIONS: --max-old-space-size=192 --dns-result-order=ipv4first
       DATABASE_URL: postgresql://ats_user:${POSTGRES_PASSWORD}@postgres:5432/ats_db?schema=ats&options=-csearch_path%3Dats,mass_mail,public
@@ -94,7 +96,14 @@ services:
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD}
       PLATFORM_ADMIN_NAME: Platform Administrator
-    volumes: [uploads:/app/public, candidate_uploads:/app/uploads]
+    volumes:
+      - uploads:/app/public
+      - candidate_uploads:/app/uploads
+      - type: bind
+        source: ${RESUME_STORAGE_HOST_DIR:?required}
+        target: /app/uploads/resumes
+        bind:
+          create_host_path: false
     depends_on:
       postgres: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}

@@ -912,5 +912,53 @@ class BackupTests(unittest.TestCase):
                     controller.backup()
             self.assertEqual(list((Path(root) / 'backups').iterdir()), [])
 
+class ResumeStorageTests(unittest.TestCase):
+    def test_configuration_is_narrow_idempotent_and_preserves_existing_files(self):
+        with tempfile.TemporaryDirectory() as base:
+            controller = object.__new__(release.Controller)
+            controller.root = Path(base) / 'ats-prod'
+            controller.home = controller.root / 'bluegreen'
+            controller.home.mkdir(parents=True)
+            controller.config = {'templates': {'backend': {'Config': {'Env': ['NODE_ENV=production']}}}}
+            folder = Path(base) / 'ats-data' / 'resumes'
+            folder.mkdir(parents=True)
+            original = folder / 'existing-original'
+            original.write_bytes(b'preserve')
+            controller.configure_resume_storage(str(folder))
+            controller.configure_resume_storage(str(folder))
+            self.assertEqual(original.read_bytes(), b'preserve')
+            self.assertTrue(controller.config['preserve_existing_data'])
+            self.assertEqual(controller.backend_environment()['RESUME_STORAGE_DIR'], '/app/uploads/resumes')
+            self.assertEqual(controller.backend_environment()['RESUME_STORAGE_REQUIRE_MOUNT'], 'true')
+            with self.assertRaises(ValueError): controller.configure_resume_storage(base)
+
+    def test_conflicting_mount_is_not_replaced(self):
+        with tempfile.TemporaryDirectory() as base:
+            controller = object.__new__(release.Controller)
+            controller.root = Path(base) / 'ats-prod'
+            controller.config = {'templates': {'backend': {'Mounts': [
+                {'Type': 'bind', 'Source': '/existing-resumes', 'Destination': '/app/uploads/resumes'}]}}}
+            with self.assertRaisesRegex(RuntimeError, 'Existing resume mount differs'):
+                controller.configure_resume_storage(str(Path(base) / 'ats-data' / 'resumes'))
+            self.assertNotIn('resume_storage', controller.config)
+
+    def test_resume_migration_is_additive(self):
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations/20261108010000_resume_folder_reference/migration.sql'
+        release.validate_additive_migration(migration.read_text(), migration.parent.name)
+
+    def test_preservation_mode_does_not_prune_old_backups(self):
+        with tempfile.TemporaryDirectory() as base:
+            controller = BackupTests().make_controller(base)
+            controller.config['preserve_existing_data'] = True
+            folder = Path(base) / 'backups'
+            folder.mkdir()
+            old = folder / 'ats-20000101T000000Z.dump'
+            old.write_bytes(b'existing-backup')
+            import os
+            os.utime(old, (1, 1))
+            with patch.object(release.subprocess, 'run', return_value=release.subprocess.CompletedProcess([], 0)):
+                controller.backup()
+            self.assertEqual(old.read_bytes(), b'existing-backup')
+
 if __name__=='__main__':
     unittest.main()

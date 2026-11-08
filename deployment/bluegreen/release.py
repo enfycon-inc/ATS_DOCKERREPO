@@ -474,6 +474,37 @@ class Controller:
         atomic(self.home / 'runtime.json', self.config)
         print('Office evidence configuration saved: ' + mode + '; applied to the next backend container')
 
+    def configure_resume_storage(self, host_directory):
+        # Explicit, narrow host binding. This operation never moves or removes files.
+        expected = self.root.parent / 'ats-data' / 'resumes'
+        folder = Path(host_directory)
+        if not folder.is_absolute() or folder != expected:
+            raise ValueError('Resume storage must be the dedicated ats-data/resumes directory beside the deployment root')
+        if any(parent.is_symlink() for parent in [folder, *folder.parents]):
+            raise ValueError('Resume storage must not traverse symbolic links')
+        if not self.config:
+            raise RuntimeError('Initialize the release controller before configuring resume storage')
+        for mount in self.config.get('templates', {}).get('backend', {}).get('Mounts', []):
+            if mount['Destination'] == '/app/uploads/resumes' and (
+                    mount['Type'] != 'bind' or mount['Source'] != str(folder)):
+                raise RuntimeError('Existing resume mount differs; preserve and review it before changing storage')
+            if mount['Destination'] == '/app/uploads' and mount.get('Source'):
+                previous = Path(mount['Source']) / 'resumes'
+                if previous != folder and previous.exists() and any(previous.iterdir()):
+                    raise RuntimeError('Existing upload volume has resume files; review without hiding or moving them')
+        current = self.config.get('resume_storage')
+        desired = {'host_dir': str(folder), 'container_dir': '/app/uploads/resumes'}
+        if current and current != desired:
+            raise RuntimeError('Existing resume storage configuration differs; review before changing it')
+        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if not folder.is_dir():
+            raise ValueError('Resume storage path is not a directory')
+        self.config['resume_storage'] = desired
+        # No backup pruning during the preservation rollout or subsequent backups.
+        self.config['preserve_existing_data'] = True
+        atomic(self.home / 'runtime.json', self.config)
+        print('Resume storage configured for the next backend release; all existing files and database originals preserved')
+
     def backend_environment(self):
         values = dict(item.split('=', 1) for item in self.config['templates']['backend']['Config']['Env'])
         flags = self.config.get('backend_feature_flags', {})
@@ -481,6 +512,9 @@ class Controller:
         if not isinstance(flags, dict) or any(key not in allowed or value not in ('true', 'false') for key, value in flags.items()):
             raise ValueError('Invalid backend feature flag configuration')
         values.update(flags)
+        if self.config.get('resume_storage'):
+            values['RESUME_STORAGE_DIR'] = self.config['resume_storage']['container_dir']
+            values['RESUME_STORAGE_REQUIRE_MOUNT'] = 'true'
         return values
 
     def backend_proxy_environment(self, values):
@@ -536,6 +570,13 @@ class Controller:
                 raise RuntimeError('Selected parser has no private IP')
             args += ['--add-host', 'api:' + parser_ip]
         mounts = copy.deepcopy(template['Mounts'])
+        if service == 'backend' and self.config.get('resume_storage'):
+            storage = self.config['resume_storage']
+            folder = Path(storage['host_dir'])
+            if not folder.is_dir() or folder.is_symlink():
+                raise RuntimeError('Configured resume folder is missing or invalid')
+            mounts = [mount for mount in mounts if mount['Destination'] != storage['container_dir']]
+            mounts.append({'Type': 'bind', 'Source': str(folder), 'Destination': storage['container_dir'], 'RW': True})
         for mount in mounts:
             source = mount.get('Name') if mount['Type'] == 'volume' else mount['Source']
             # Freeze mounted parser adapters with each release.
@@ -840,7 +881,7 @@ if(!renewed.accessToken)throw Error('Refresh failed');console.log('PASS login/pr
                 raise RuntimeError(kind + ' backup command failed (exit ' + str(result.returncode) + ')')
             os.replace(temp, path)
         for path in folder.iterdir():
-            if path.is_file() and re.fullmatch(r'(ats-|uploads-)[0-9TZ]+\.(dump|tar\.gz)', path.name) and path.stat().st_mtime < time.time() - 7 * 86400:
+            if not self.config.get('preserve_existing_data') and path.is_file() and re.fullmatch(r'(ats-|uploads-)[0-9TZ]+\.(dump|tar\.gz)', path.name) and path.stat().st_mtime < time.time() - 7 * 86400:
                 path.unlink()
         print('Backup completed: ' + stamp)
 
@@ -1542,6 +1583,9 @@ def main():
                               'retained': retained_ids(controller.state), 'pending': controller.state['pending'],
                               'cleanup_error': controller.state.get('cleanup_error'),
                               'prisma_baseline': controller.config.get('prisma_baseline', {}).get('name')}))
+            return
+        if action == 'configure-resume-storage':
+            controller.configure_resume_storage(os.environ['RESUME_STORAGE_HOST_DIR'])
             return
         controller.recover_router_migration()
         controller.restore_retirement_queues()
