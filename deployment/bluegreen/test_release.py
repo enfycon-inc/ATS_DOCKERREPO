@@ -13,6 +13,27 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
 
+class UnitScopedRoleNameMigrationTests(unittest.TestCase):
+    def test_accepts_only_exact_reviewed_index_replacement(self):
+        name = '20261110120000_unit_scoped_custom_role_names'
+        migration = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations' / name / 'migration.sql'
+        sql = migration.read_text()
+        release.validate_additive_migration(sql, name)
+        release.validate_additive_migration(sql.replace('\n', '\r\n'), name)
+        for changed, identity in (
+            (sql, 'unreviewed_index_change'),
+            (sql.replace('-- ATS: rollback-compatible', ''), name),
+            (sql.replace('DROP INDEX IF EXISTS idx_custom_roles_branch_name;', 'DROP TABLE ats.custom_roles;'), name),
+            (sql.replace('COMMIT;', "DELETE FROM ats.users; COMMIT;"), name),
+            (sql.replace('business_unit_id IS NOT NULL', 'business_unit_id IS NULL'), name),
+            (sql.replace("SET LOCAL lock_timeout = '5s';", ''), name),
+            (sql.replace('COMMIT;', ''), name),
+        ):
+            with self.subTest(identity=identity, sql=changed):
+                with self.assertRaises(RuntimeError):
+                    release.validate_additive_migration(changed, identity)
+
+
 class ClientBillRateMigrationTests(unittest.TestCase):
     def test_bill_rate_grants_accept_only_reviewed_content_and_identity(self):
         root = Path(__file__).resolve().parents[2] / 'ats_backend/prisma/migrations'

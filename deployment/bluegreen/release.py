@@ -308,7 +308,18 @@ def validate_additive_migration(sql, migration_name=None):
     )
     if migration_name == presence_default_migration and not reviewed_presence_default:
         raise RuntimeError(context + 'default presence migration differs from the approved role permission grant')
-    if changes_data and not (reviewed_bill_rate or reviewed_permission_grant or reviewed_ownership or reviewed_submission_origin or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export or reviewed_candidate_ctc or reviewed_presence_default):
+    # Reviewed unit-scoped role-name index replacement. Old images retain their
+    # stricter application checks; rollback replicas skip bootstrap DDL. No role
+    # data or assignments are changed. Only this exact migration is authorized.
+    unit_role_names_migration = '20261110120000_unit_scoped_custom_role_names'
+    reviewed_unit_role_names = (
+        migration_name == unit_role_names_migration
+        and hashlib.sha256(sql.replace('\r\n', '\n').encode()).hexdigest()
+        == '6c640d8995cc15d2f863449728f75f65a1064f3760cc35d4577ee4c17090247b'
+    )
+    if migration_name == unit_role_names_migration and not reviewed_unit_role_names:
+        raise RuntimeError(context + 'unit-scoped role-name migration differs from the reviewed index replacement')
+    if changes_data and not (reviewed_unit_role_names or reviewed_bill_rate or reviewed_permission_grant or reviewed_ownership or reviewed_submission_origin or reviewed_pod_lead or reviewed_restricted_pod_deletion or reviewed_submission_resume or reviewed_tenant_logos or reviewed_unit_geofences or reviewed_job_export or reviewed_candidate_ctc or reviewed_presence_default):
         raise RuntimeError(context + 'destructive/data-changing migration needs separate review; traffic unchanged')
     if not re.search(r'^\s*BEGIN\s*;', plain, re.I) or not re.search(r'COMMIT\s*;\s*$', plain, re.I):
         raise RuntimeError(context + 'must be transactional')
